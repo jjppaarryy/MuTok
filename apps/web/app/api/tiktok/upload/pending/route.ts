@@ -8,6 +8,13 @@ import { isCooldownActive, setCooldown } from "../../../../../lib/tiktokSettings
 
 const isSpamRisk = (message: string) => message.includes("spam_risk");
 import { readFile, stat } from "fs/promises";
+
+type UploadInitResponse = {
+  data?: {
+    upload_url?: string;
+    publish_id?: string;
+  };
+};
 import { getPendingShareCount24h, canUploadMore } from "../../../../../lib/queue";
 
 export async function POST(request: Request) {
@@ -100,7 +107,7 @@ export async function POST(request: Request) {
         }
       });
 
-      const uploadUrl = (initResponse as any)?.data?.upload_url;
+      const uploadUrl = (initResponse as UploadInitResponse)?.data?.upload_url;
       if (!uploadUrl) {
         results.push({ id: plan.id, status: "FAILED", error: "Missing upload_url" });
         continue;
@@ -131,7 +138,7 @@ export async function POST(request: Request) {
         where: { id: plan.id },
         data: {
           status: "UPLOADED_DRAFT",
-          tiktokPublishId: (initResponse as any)?.data?.publish_id ?? null
+          tiktokPublishId: (initResponse as UploadInitResponse)?.data?.publish_id ?? null
         }
       });
 

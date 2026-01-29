@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { prisma } from "../../../../lib/prisma";
 import { createTikTokClient } from "../../../../../../packages/core/src/tiktok";
 import { getValidAccessToken } from "../../../../lib/tiktokAuth";
 import { getTikTokSettings } from "../../../../lib/tiktokSettings";

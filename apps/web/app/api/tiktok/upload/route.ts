@@ -6,9 +6,30 @@ import { getTikTokSettings } from "../../../../lib/tiktokSettings";
 import { logRunError } from "../../../../lib/logs";
 import { getPendingShareCount24h } from "../../../../lib/queue";
 import { isCooldownActive, setCooldown } from "../../../../lib/tiktokSettings";
+import { shouldBlockUpload } from "../../../../lib/preflightScoring";
 
 const isSpamRisk = (message: string) => message.includes("spam_risk");
 import { readFile, stat } from "fs/promises";
+
+type UploadInitResponse = {
+  data?: {
+    upload_url?: string;
+    publish_id?: string;
+  };
+};
+
+// Map our privacy values to TikTok's API values
+function mapPrivacyLevel(visibility: string): string {
+  switch (visibility) {
+    case "PUBLIC":
+      return "PUBLIC_TO_EVERYONE";
+    case "FRIENDS":
+      return "MUTUAL_FOLLOW_FRIENDS";
+    case "PRIVATE":
+    default:
+      return "SELF_ONLY";
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -44,6 +65,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "PostPlan not found" }, { status: 404 });
     }
 
+    // Preflight scoring check - block low-quality content
+    const preflightCheck = await shouldBlockUpload(postPlanId);
+    if (preflightCheck.block) {
+      console.log(`[tiktok/upload] Blocked by preflight: ${preflightCheck.reason} (score: ${preflightCheck.score})`);
+      return NextResponse.json(
+        { error: preflightCheck.reason, preflightScore: preflightCheck.score },
+        { status: 400 }
+      );
+    }
+
     const clipIds = postPlan.clipIds as string[];
     const clips = await prisma.clip.findMany({
       where: { id: { in: clipIds } }
@@ -70,16 +101,23 @@ export async function POST(request: Request) {
     const fileStats = await stat(postPlan.renderPath);
 
     const exportDefaults = settings.export_defaults;
+    // Unaudited apps can only post as SELF_ONLY (private)
+    // Once app is approved, can use: mapPrivacyLevel(exportDefaults.visibility)
+    const privacyLevel = settings.sandbox ? "SELF_ONLY" : mapPrivacyLevel(exportDefaults.visibility);
+    
+    const postInfo: Record<string, unknown> = {
+      title: postPlan.caption || exportDefaults.caption || "Video",
+      privacy_level: privacyLevel,
+      disable_comment: !exportDefaults.allowComment,
+      disable_duet: !exportDefaults.allowDuet,
+      disable_stitch: !exportDefaults.allowStitch
+    };
+    
+    console.log("[tiktok/upload] Post info:", JSON.stringify(postInfo));
+    console.log("[tiktok/upload] File size:", fileStats.size);
+    
     const initResponse = await client.initializeUpload({
-      post_info: {
-        title: postPlan.caption || exportDefaults.caption,
-        privacy_level: exportDefaults.visibility,
-        disable_comment: !exportDefaults.allowComment,
-        disable_duet: !exportDefaults.allowDuet,
-        disable_stitch: !exportDefaults.allowStitch,
-        branded_content: exportDefaults.brandedContent,
-        brand_content_toggle: exportDefaults.promoteYourself
-      },
+      post_info: postInfo,
       source_info: {
         source: "FILE_UPLOAD",
         video_size: fileStats.size,
@@ -88,7 +126,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const uploadUrl = (initResponse as any)?.data?.upload_url;
+    const uploadUrl = (initResponse as UploadInitResponse)?.data?.upload_url;
     if (!uploadUrl) {
       return NextResponse.json({ error: "Missing upload_url" }, { status: 500 });
     }
@@ -104,13 +142,15 @@ export async function POST(request: Request) {
       where: { id: postPlanId },
       data: {
         status: "UPLOADED_DRAFT",
-        tiktokPublishId: (initResponse as any)?.data?.publish_id ?? null
+        tiktokPublishId: (initResponse as UploadInitResponse)?.data?.publish_id ?? null
       }
     });
 
     return NextResponse.json({ status: "UPLOADED_DRAFT" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Upload failed";
+    console.error("[tiktok/upload] Error:", message);
+    console.error("[tiktok/upload] Full error:", error);
     if (isSpamRisk(message)) {
       await setCooldown(24);
     }
@@ -118,6 +158,6 @@ export async function POST(request: Request) {
       runType: "tiktok_upload",
       error: message
     });
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

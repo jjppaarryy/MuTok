@@ -1,106 +1,71 @@
 import { prisma } from "./prisma";
+import { getRulesSettings } from "./settings";
 
-const defaultRecipes = [
-  {
-    name: "Early access",
-    beat1Templates: ["You’re early. Unreleased."],
-    beat2Templates: ["Wait for 0:06."],
-    ctaType: "FOLLOW_FULL",
-    allowedSnippetTypes: ["moment_3_7", "moment_7_11"],
-    disallowedContainers: []
-  },
-  {
-    name: "Binary judgement",
-    beat1Templates: ["KEEP or SKIP?"],
-    beat2Templates: ["Be brutal at 0:07."],
-    ctaType: "KEEP_SKIP",
-    allowedSnippetTypes: ["moment_3_7"],
-    disallowedContainers: []
-  },
-  {
-    name: "Timestamp lure",
-    beat1Templates: ["Wait for 0:06."],
-    beat2Templates: ["Did you catch it?"],
-    ctaType: "COMMENT_VIBE",
-    allowedSnippetTypes: ["moment_3_7", "moment_7_11"],
-    disallowedContainers: []
-  },
-  {
-    name: "Reference anchor",
-    beat1Templates: ["If you like Anyma…"],
-    beat2Templates: ["This drop is the test."],
-    ctaType: "COMMENT_VIBE",
-    allowedSnippetTypes: ["moment_3_7"],
-    disallowedContainers: []
-  },
-  {
-    name: "Open loop",
-    beat1Templates: ["This sound is wrong on purpose."],
-    beat2Templates: ["Guess what I made it with."],
-    ctaType: "COMMENT_VIBE",
-    allowedSnippetTypes: ["moment_3_7"],
-    disallowedContainers: ["montage"]
-  },
-  {
-    name: "Stakes",
-    beat1Templates: ["If this flops, I bin it."],
-    beat2Templates: ["Should I keep it?"],
-    ctaType: "KEEP_SKIP",
-    allowedSnippetTypes: ["moment_3_7"],
-    disallowedContainers: []
-  },
-  {
-    name: "Identity gate",
-    beat1Templates: ["If you get it, you get it."],
-    beat2Templates: ["Name this vibe."],
-    ctaType: "COMMENT_VIBE",
-    allowedSnippetTypes: ["moment_7_11"],
-    disallowedContainers: []
-  },
-  {
-    name: "Confession",
-    beat1Templates: ["I might be overcooking this."],
-    beat2Templates: ["Be honest at 0:07."],
-    ctaType: "KEEP_SKIP",
-    allowedSnippetTypes: [],
-    disallowedContainers: []
-  },
-  {
-    name: "Micro-challenge",
-    beat1Templates: ["2 seconds. KEEP/SKIP."],
-    beat2Templates: ["Don’t overthink it."],
-    ctaType: "KEEP_SKIP",
-    allowedSnippetTypes: ["moment_3_7"],
-    disallowedContainers: []
-  },
-  {
-    name: "Name it",
-    beat1Templates: ["What do we call this?"],
-    beat2Templates: ["Best name wins."],
-    ctaType: "COMMENT_VIBE",
-    allowedSnippetTypes: ["moment_7_11"],
-    disallowedContainers: []
-  }
-];
+type DefaultRecipe = {
+  name: string;
+  beat1Templates: string[];
+  beat2Templates: string[];
+  captionTemplate?: string;
+  ctaType: string;
+  allowedSnippetTypes: string[];
+  disallowedContainers: string[];
+};
+
+const defaultRecipes: DefaultRecipe[] = [];
 
 export async function ensureHookRecipes() {
-  const count = await prisma.hookRecipe.count();
-  if (count > 0) return;
-  await prisma.hookRecipe.createMany({
-    data: defaultRecipes.map((recipe) => ({
-      name: recipe.name,
-      enabled: true,
-      beat1Templates: recipe.beat1Templates,
-      beat2Templates: recipe.beat2Templates,
-      ctaType: recipe.ctaType,
-      allowedSnippetTypes: recipe.allowedSnippetTypes,
-      disallowedContainers: recipe.disallowedContainers
-    }))
-  });
+  if (defaultRecipes.length === 0) return;
+  for (const recipe of defaultRecipes) {
+    await prisma.hookRecipe.create({
+      data: {
+        name: recipe.name,
+        enabled: true,
+        locked: false,
+        beat1Templates: recipe.beat1Templates,
+        beat2Templates: recipe.beat2Templates,
+        captionTemplate: recipe.captionTemplate ?? null,
+        ctaType: recipe.ctaType,
+        allowedSnippetTypes: recipe.allowedSnippetTypes,
+        disallowedContainers: recipe.disallowedContainers,
+        source: "default"
+      }
+    });
+  }
 }
 
 export async function getEnabledHookRecipes() {
   await ensureHookRecipes();
+  const rules = await getRulesSettings();
+  const hashtags = (rules.caption_hashtags ?? [])
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, rules.spam_guardrails.hashtag_count_max);
+  const fallbackTopic = (rules.caption_topic_keywords ?? [])[0] ?? "";
+  const defaultCaption = [fallbackTopic, hashtags.join(" ")].filter(Boolean).join(" ").trim();
+  const missingCaptions = await prisma.hookRecipe.findMany({
+    where: {
+      enabled: true,
+      OR: [
+        { captionTemplate: null },
+        { captionTemplate: "" },
+        defaultCaption ? { captionTemplate: defaultCaption } : undefined
+      ].filter(Boolean) as Array<{ captionTemplate?: string | null }>
+    },
+    select: { id: true, beat1Templates: true, name: true }
+  });
+  for (const recipe of missingCaptions) {
+    const beat1 =
+      Array.isArray(recipe.beat1Templates) && typeof recipe.beat1Templates[0] === "string"
+        ? recipe.beat1Templates[0]
+        : "";
+    const lead = beat1.trim() || recipe.name || fallbackTopic;
+    const caption = [lead, hashtags.join(" ")].filter(Boolean).join(" ").trim();
+    if (!caption) continue;
+    await prisma.hookRecipe.update({
+      where: { id: recipe.id },
+      data: { captionTemplate: caption }
+    });
+  }
   return prisma.hookRecipe.findMany({ where: { enabled: true } });
 }
 

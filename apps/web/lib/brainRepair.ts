@@ -21,6 +21,90 @@ type RepairResult = {
 };
 
 const maxLineLength = 40;
+const maxTotalLength = 80;
+
+// Beat 2 instruction keywords that indicate a proper CTA
+const beat2InstructionKeywords = [
+  "wait", "keep", "skip", "comment", "pick", "follow", "name", "where", "which", "choose",
+  "honest", "tell", "rate", "guess", "vote", "decide", "drop", "share", "save", "?",
+  "a or b", "yes or no", "warm-up", "peak"
+];
+
+export type TwoBeatValidationResult = {
+  valid: boolean;
+  reason?: string;
+  beat1Length: number;
+  beat2Length: number;
+  totalLength: number;
+  hasBeat2Instruction: boolean;
+};
+
+export function validateTwoBeatStructure(onscreenText: string): TwoBeatValidationResult {
+  const lines = onscreenText.split("\n").map((line) => line.trim()).filter(Boolean);
+  
+  if (lines.length < 2) {
+    return {
+      valid: false,
+      reason: "Missing two-beat structure (need exactly 2 lines)",
+      beat1Length: lines[0]?.length ?? 0,
+      beat2Length: 0,
+      totalLength: onscreenText.length,
+      hasBeat2Instruction: false
+    };
+  }
+  
+  const beat1 = lines[0] ?? "";
+  const beat2 = lines[1] ?? "";
+  const beat1Length = beat1.length;
+  const beat2Length = beat2.length;
+  const totalLength = beat1Length + beat2Length;
+  
+  // Check if Beat 2 contains an instruction keyword
+  const beat2Lower = beat2.toLowerCase();
+  const hasBeat2Instruction = beat2InstructionKeywords.some((kw) => beat2Lower.includes(kw));
+  
+  // Validation checks
+  if (totalLength > maxTotalLength) {
+    return {
+      valid: false,
+      reason: `Total length too long (${totalLength} > ${maxTotalLength} chars)`,
+      beat1Length,
+      beat2Length,
+      totalLength,
+      hasBeat2Instruction
+    };
+  }
+  
+  if (!hasBeat2Instruction) {
+    return {
+      valid: false,
+      reason: "Beat 2 missing instruction keyword (wait/keep/skip/comment/pick/etc.)",
+      beat1Length,
+      beat2Length,
+      totalLength,
+      hasBeat2Instruction
+    };
+  }
+  
+  if (beat1.includes("?")) {
+    return {
+      valid: false,
+      reason: "Beat 1 should not be a question (questions go in Beat 2)",
+      beat1Length,
+      beat2Length,
+      totalLength,
+      hasBeat2Instruction
+    };
+  }
+  
+  return {
+    valid: true,
+    beat1Length,
+    beat2Length,
+    totalLength,
+    hasBeat2Instruction
+  };
+}
 
 const normalizeLines = (text: string) =>
   text
@@ -55,12 +139,12 @@ const compressLine = (text: string, bannedWords: string[]) => {
 };
 
 const instructionLibrary = {
-  KEEP_SKIP: ["KEEP or SKIP?", "KEEP/SKIP?"],
+  KEEP_SKIP: ["KEEP or SKIP?", "Give me 2.5 seconds.", "Would you play this?"],
   COMMENT_VIBE: [
-    "Comment the vibe.",
-    "Comment warm-up or peak?",
-    "Comment the timestamp.",
-    "Name the vibe."
+    "If you're here, say hi.",
+    "Warm-up or peak?",
+    "Say hi if you're here.",
+    "Where would you drop this?"
   ],
   FOLLOW_FULL: ["Follow for the ID.", "Follow for the full ID."],
   PICK_AB: ["Pick A or B?", "Pick A/B."]
@@ -187,9 +271,10 @@ const attemptSpellcheck = async (input: RepairInput, text: string) => {
 };
 
 export async function ensureTwoBeat(input: RepairInput): Promise<RepairResult> {
-  const requireTimestamp =
+  const requireTimestamp = Boolean(
     input.hookFamily === "wait_for_it" &&
-    (input.snippet?.moment3to7 || input.snippet?.moment7to11);
+    (input.snippet?.moment3to7 || input.snippet?.moment7to11)
+  );
   const lines = normalizeLines(input.onscreenText);
   if (lines.length >= 2) {
     const shouldRepair =

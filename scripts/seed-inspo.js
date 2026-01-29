@@ -22,62 +22,81 @@ async function main() {
 
   for (const item of items) {
     try {
-      // Check if already exists by sourceId
-      const existing = await prisma.inspoItem.findFirst({
-        where: {
-          source: "notion",
-          sourceId: item.notion_row_id
-        }
-      });
-
-      if (existing) {
-        console.log(`  Skipping ${item.notion_row_id} (already exists)`);
+      const source = item.source;
+      if (!source) {
+        console.log("  Skipping item (missing source)");
         skipped++;
         continue;
       }
+      const sourceId = item.sourceId || null;
 
-      // Map fields to InspoItem schema
+      const existing = sourceId
+        ? await prisma.inspoItem.findFirst({ where: { source, sourceId } })
+        : null;
+
+      const seedFromVoicebank =
+        item.beat1 && item.beat2
+          ? [
+              {
+                core_mechanic: item.sourceId || item.hook_family || "voicebank",
+                hook_family: item.hook_family || "voicebank",
+                music_first_variants: [
+                  {
+                    beat1: item.beat1,
+                    beat2: item.beat2,
+                    caption: item.full_copy || item.copyRewrite || null
+                  }
+                ]
+              }
+            ]
+          : null;
+
+      const seedPatterns =
+        Array.isArray(item.seedPatterns) && item.seedPatterns.length
+          ? item.seedPatterns
+          : seedFromVoicebank;
+
       const inspoItem = {
-        source: "notion",
-        sourceId: item.notion_row_id,
-        title: item.title,
-        contentType: item.content_type,
-        assetType: item.asset_type,
-        linkOriginal: item.link_original || null,
-        copyRewrite: item.copy,
-        whyItWorks: item.why_it_works,
-        description: item.description,
-        howToUse: item.how_to_use,
-        themeTags: item.theme ? [item.theme] : [],
-        purposeTags: item.purpose ? [item.purpose] : [],
-        genreTags: item.genre ? [item.genre] : [],
-        hashtags: item.hashtags || [],
-        stats: {
-          views: item.metrics_views || 0,
-          likes: item.metrics_likes || 0,
-          comments: item.metrics_comments || 0,
-          shares: item.metrics_shares || 0
-        },
-        seedPatterns: {
-          copyTemplate: item.copy_template,
-          isActive: item.is_active !== false
-        },
+        source,
+        sourceId,
+        title: item.title || sourceId,
+        contentType: item.contentType || null,
+        assetType: item.assetType || null,
+        linkOriginal: item.linkOriginal || null,
+        copyRewrite: item.full_copy || item.copyRewrite || item.copy || null,
+        whyItWorks: item.whyItWorks || null,
+        description: item.description || null,
+        howToUse: item.howToUse || null,
+        themeTags: Array.isArray(item.themeTags) && item.themeTags.length ? item.themeTags : null,
+        purposeTags:
+          Array.isArray(item.purposeTags) && item.purposeTags.length ? item.purposeTags : null,
+        genreTags: Array.isArray(item.genreTags) && item.genreTags.length ? item.genreTags : null,
+        hashtags: Array.isArray(item.hashtags) && item.hashtags.length ? item.hashtags : null,
+        stats: item.stats || null,
+        seedPatterns,
         favorite: false
       };
 
+      if (existing) {
+        await prisma.inspoItem.update({ where: { id: existing.id }, data: inspoItem });
+        console.log(`  Updated: ${sourceId ?? existing.id}`);
+        imported++;
+        continue;
+      }
+
       await prisma.inspoItem.create({ data: inspoItem });
-      console.log(`  Imported: ${item.title}`);
+      console.log(`  Imported: ${sourceId ?? item.title ?? "inspo item"}`);
       imported++;
     } catch (error) {
-      console.error(`  Error importing ${item.notion_row_id}:`, error.message);
-      errors.push({ id: item.notion_row_id, error: error.message });
+      console.error(`  Error importing ${item.sourceId ?? "unknown"}:`, error.message);
+      errors.push({ id: item.sourceId ?? "unknown", error: error.message });
     }
   }
 
   // Log the import
   await prisma.inspoImportLog.create({
     data: {
-      source: "notion",
+      source: items[0]?.source ?? null,
       rawJson: { itemCount: items.length },
       imported,
       skipped,

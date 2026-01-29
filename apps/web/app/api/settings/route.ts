@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma";
-import { defaultRules } from "../../../lib/settings";
+import { defaultRules } from "../../../lib/rulesConfig";
 import { requireLocalRequest } from "../../../lib/auth";
 
 export async function GET(request: NextRequest) {

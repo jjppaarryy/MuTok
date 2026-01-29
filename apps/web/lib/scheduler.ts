@@ -4,7 +4,7 @@ type SchedulerOptions = {
   enabled: boolean;
   onRun: () => Promise<void>;
   cronExpression?: string;
-  windowTimes?: [string, string];
+  windowTimes?: string[];
   intervalMinutes?: number;
 };
 
@@ -28,13 +28,25 @@ export function registerScheduler(options: SchedulerOptions): SchedulerTask | nu
     };
   }
 
-  let expression = options.cronExpression ?? "0 9,18 * * *";
-  if (options.windowTimes) {
-    const [first, second] = options.windowTimes;
-    const [h1, m1] = first.split(":").map(Number);
-    const [h2, m2] = second.split(":").map(Number);
-    expression = `${m1} ${h1},${h2} * * *`;
+  if (options.windowTimes && options.windowTimes.length > 0) {
+    const tasks = options.windowTimes.map((time) => {
+      const [start] = time.split("-");
+      const [hour, minute] = start.split(":").map(Number);
+      const expression = `${minute} ${hour} * * *`;
+      return cron.schedule(expression, async () => {
+        try {
+          await options.onRun();
+        } catch (error) {
+          console.error("Scheduled run failed", error);
+        }
+      });
+    });
+    return {
+      stop: () => tasks.forEach((task) => task.stop())
+    };
   }
+
+  const expression = options.cronExpression ?? "0 9,18 * * *";
   const task = cron.schedule(expression, async () => {
     try {
       await options.onRun();
@@ -42,6 +54,5 @@ export function registerScheduler(options: SchedulerOptions): SchedulerTask | nu
       console.error("Scheduled run failed", error);
     }
   });
-
   return task;
 }

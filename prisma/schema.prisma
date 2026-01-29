@@ -130,6 +130,7 @@ model HookRecipe {
   locked               Boolean    @default(false)
   beat1Templates       Json
   beat2Templates       Json
+  captionTemplate      String?
   ctaType              String
   allowedSnippetTypes  Json
   disallowedContainers Json
@@ -197,6 +198,8 @@ model ArmStats {
   beta        Float     @default(1)
   mean        Float     @default(0)
   variance    Float     @default(1)
+  usesToday   Int       @default(0)
+  lastResetAt DateTime  @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -215,6 +218,9 @@ model Metric {
   likes         Int
   comments      Int
   shares        Int
+  view2Rate     Float?
+  view6Rate     Float?
+  retentionRate Float?
   rewardScore   Float?
   followerDelta Int?
   collectedAt   DateTime @default(now())
@@ -284,5 +290,40 @@ model InspoImportLog {
   createdAt DateTime @default(now())
 
   @@index([source])
+  @@index([createdAt])
+}
+
+model WinnerExample {
+  id              String   @id @default(cuid())
+  postPlanId      String   @unique
+  onscreenText    String
+  caption         String
+  hookFamily      String
+  recipeId        String?
+  variantId       String?
+  ctaIntent       String?
+  container       String
+  clipCategories  Json
+  snippetSection  String?
+  rewardScore     Float
+  views           Int
+  followerDelta   Int?
+  createdAt       DateTime @default(now())
+
+  @@index([rewardScore])
+  @@index([hookFamily])
+  @@index([createdAt])
+}
+
+model VoiceBank {
+  id        String   @id @default(cuid())
+  text      String
+  tags      Json?
+  enabled   Boolean  @default(true)
+  weight    Float    @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([enabled])
+  @@index([weight])
   @@index([createdAt])
 }

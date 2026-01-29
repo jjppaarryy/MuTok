@@ -57,10 +57,13 @@ export function createTikTokClient(options: TikTokClientOptions) {
     },
 
     async uploadVideo(uploadUrl: string, fileBuffer: ArrayBuffer) {
+      const fileSize = fileBuffer.byteLength;
       const response = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": "video/mp4"
+          "Content-Type": "video/mp4",
+          "Content-Length": fileSize.toString(),
+          "Content-Range": `bytes 0-${fileSize - 1}/${fileSize}`
         },
         body: fileBuffer
       });
@@ -84,6 +87,14 @@ export function createTikTokClient(options: TikTokClientOptions) {
         method: "POST",
         headers,
         body: JSON.stringify(payload)
+      });
+    },
+
+    async getPublishStatus(publishId: string) {
+      return tiktokFetch("/v2/post/publish/status/fetch/", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ publish_id: publishId })
       });
     }
   };

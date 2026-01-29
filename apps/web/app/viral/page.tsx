@@ -23,14 +23,8 @@ type OptimiserPolicy = {
   max_locked_share: number;
   prior_mean: number;
   prior_weight: number;
-  inspo_seed_enabled: boolean;
-  inspo_seed_weight: number;
-  inspo_seed_max_pulls: number;
   autopilot_enabled: boolean;
   autopilot_interval_hours: number;
-  autopilot_inspo_enabled: boolean;
-  autopilot_inspo_days: number;
-  autopilot_inspo_only_favorites: boolean;
   plateau_days: number;
   test_dimensions: {
     recipe: boolean;
@@ -70,13 +64,6 @@ type SchedulerStatus = {
   lastError?: string | null;
 };
 
-const ctaOptions = [
-  { id: "KEEP_SKIP", label: "KEEP / SKIP" },
-  { id: "COMMENT_VIBE", label: "Comment vibe" },
-  { id: "FOLLOW_FULL", label: "Follow for full ID" },
-  { id: "PICK_AB", label: "Pick A/B" }
-];
-
 export default function ViralEnginePage() {
   const [rules, setRules] = useState<RulesSettings>({
     viral_engine: {
@@ -96,19 +83,13 @@ export default function ViralEnginePage() {
       max_locked_share: 0.7,
       prior_mean: 1,
       prior_weight: 2,
-    inspo_seed_enabled: true,
-    inspo_seed_weight: 2,
-    inspo_seed_max_pulls: 5,
-    autopilot_enabled: false,
-    autopilot_interval_hours: 4,
-    autopilot_inspo_enabled: false,
-    autopilot_inspo_days: 7,
-    autopilot_inspo_only_favorites: true,
+      autopilot_enabled: false,
+      autopilot_interval_hours: 4,
       plateau_days: 7,
       test_dimensions: {
         recipe: true,
-        variant: true,
-        cta: true,
+        variant: false,
+        cta: false,
         container: true,
         beat_timing: true,
         timestamp_lure: true

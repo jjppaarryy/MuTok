@@ -97,8 +97,9 @@ export async function GET() {
     };
   });
 
+  type ExperimentFlags = { selection?: { recipe?: string } } | null;
   const exploreCount = plans.filter((plan) => {
-    const flags = plan.experimentFlags as any;
+    const flags = plan.experimentFlags as ExperimentFlags;
     const mode = flags?.selection?.recipe;
     return mode === "explore" || mode === "unpulled";
   }).length;

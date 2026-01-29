@@ -1,9 +1,6 @@
-import {
-  brainSchema,
-  BrainPlan
-} from "../../../packages/core/src/brainSchema";
 import { fetchWithTimeout, TIMEOUTS } from "./fetchWithTimeout";
 import { getConfig } from "./config";
+import { systemPrompt, developerPrompt } from "./brainPrompt";
 
 export type BrainInput = {
   settings: Record<string, unknown>;
@@ -11,68 +8,27 @@ export type BrainInput = {
   snippets: Array<Record<string, unknown>>;
   metricsSummary: Record<string, unknown>;
   queueState: Record<string, unknown>;
+  performance_summary?: Record<string, unknown>;
+  hook_recipe_templates?: Array<Record<string, unknown>>;
+  voice_bank_top_lines?: string[];
 };
 
-export function validateBrainPlan(raw: unknown): BrainPlan {
-  return brainSchema.parse(raw);
-}
-
-const brainSchemaJson = JSON.stringify(
-  {
-    run_id: "string",
-    posts: [
-      {
-        scheduled_for: "ISO date",
-        container: "static_daw | montage",
-        clip_ids: ["string"],
-        track_id: "string",
-        snippet_id: "string",
-        onscreen_text: "string",
-        caption: "string",
-        hook_family: "string",
-        confidence: 0.0,
-        reasons: ["string"]
-      }
-    ]
-  },
-  null,
-  2
-);
-
-const extractJson = (text: string) => {
-  const match = text.match(/\{[\s\S]*\}/);
-  return match ? match[0] : null;
+export type BrainPost = {
+  scheduled_for: string;
+  container: string;
+  clip_ids: string[];
+  track_id: string;
+  snippet_id: string;
+  onscreen_text: string;
+  caption: string;
+  hook_family: string;
+  confidence: number;
+  reasons: string[];
 };
 
-const parseJson = (text: string) => {
-  const jsonText = extractJson(text);
-  if (!jsonText) {
-    throw new Error("No JSON found in LLM response");
-  }
-  return JSON.parse(jsonText);
-};
-
-const buildPrompt = (input: BrainInput, systemPrompt: string) => {
-  return [
-    systemPrompt,
-    "Return ONLY valid JSON matching this schema:",
-    brainSchemaJson,
-    "",
-    "Viral mechanics rules:",
-    "- Must include at least 2 retention levers and 1 interaction lever.",
-    "- On-screen text must be two beats: Beat1 (0:00-0:02) then Beat2 (0:02-0:05).",
-    "- Beat1 should be concise and clear.",
-    "- Beat2 must include an instruction (wait/keep/skip/comment/pick).",
-    "- Never use filler words: hope, please, let me know, new track.",
-    "- Always include one CTA from allowed list in settings.",
-    "- Snippet must include a moment in 3-7s and another in 7-11s if possible.",
-    "- If montage: first cut around 0:02-0:03 to reset attention.",
-    "- CTA must be one of: KEEP/SKIP, comment vibe, follow for full ID, pick A/B.",
-    "- Caption must start with topic keywords from settings (not the hook).",
-    "",
-    "Input data:",
-    JSON.stringify(input, null, 2)
-  ].join("\n");
+export type BrainPlan = {
+  run_id: string;
+  posts: BrainPost[];
 };
 
 type BrainResult = {
@@ -81,17 +37,99 @@ type BrainResult = {
   responseText: string;
 };
 
-export async function runBrain(
-  input: BrainInput,
-  systemPrompt: string
-): Promise<BrainResult> {
+export function validateBrainPlan(raw: unknown): BrainPlan {
+  const plan = raw as BrainPlan;
+  if (!plan.run_id || !Array.isArray(plan.posts)) {
+    throw new Error("Invalid brain plan structure");
+  }
+  return plan;
+}
+
+// Structured outputs schema - enforces exact 2 posts with valid structure
+const outputSchema = {
+  name: "tiktok_post_plan_run",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["run_id", "posts"],
+    properties: {
+      run_id: { type: "string" },
+      posts: {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "scheduled_for",
+            "container",
+            "clip_ids",
+            "track_id",
+            "snippet_id",
+            "onscreen_text",
+            "caption",
+            "hook_family",
+            "confidence",
+            "reasons"
+          ],
+          properties: {
+            scheduled_for: { type: "string" },
+            container: { type: "string", enum: ["static_daw", "montage"] },
+            clip_ids: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string" }
+            },
+            track_id: { type: "string" },
+            snippet_id: { type: "string" },
+            onscreen_text: { type: "string" },
+            caption: { type: "string" },
+            hook_family: {
+              type: "string",
+              enum: [
+                "anti_algo",
+                "small_numbers",
+                "doomscroll",
+                "youre_early",
+                "keep_skip",
+                "wait_for_it",
+                "if_you_like",
+                "dj_context",
+                "emotional_lift",
+                "producer_brain",
+                "stakes",
+                "open_loop"
+              ]
+            },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            reasons: {
+              type: "array",
+              minItems: 2,
+              maxItems: 4,
+              items: { type: "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+export async function runBrain(input: BrainInput): Promise<BrainResult> {
   const apiKey = await getConfig("OPENAI_API_KEY");
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY. Please configure it in Settings.");
   }
 
   const model = process.env.OPENAI_MODEL ?? "gpt-4o";
-  const prompt = buildPrompt(input, systemPrompt);
+  const userContent = JSON.stringify(input, null, 2);
+
+  // Combine system + developer prompts (developer role not available in chat completions)
+  const fullSystemPrompt = `${systemPrompt}\n\n---\n\nOPERATING PROCEDURE:\n${developerPrompt}`;
+
+  console.log("[brain] Calling OpenAI with structured outputs...");
 
   const response = await fetchWithTimeout(
     "https://api.openai.com/v1/chat/completions",
@@ -104,16 +142,17 @@ export async function runBrain(
       body: JSON.stringify({
         model,
         messages: [
-          {
-            role: "system",
-            content: "You are a strict JSON generator. Output JSON only."
-          },
-          { role: "user", content: prompt }
+          { role: "system", content: fullSystemPrompt },
+          { role: "user", content: `Input data:\n${userContent}` }
         ],
-        temperature: 0.4
+        temperature: 0.7,
+        response_format: {
+          type: "json_schema",
+          json_schema: outputSchema
+        }
       })
     },
-    TIMEOUTS.LONG
+    TIMEOUTS.VERY_LONG // 5 minutes for structured outputs
   );
 
   if (!response.ok) {
@@ -126,64 +165,19 @@ export async function runBrain(
   };
   const responseText = raw.choices?.[0]?.message?.content ?? "";
 
-  let parsed: unknown;
+  console.log("[brain] Response received, parsing...");
+
+  let parsed: BrainPlan;
   try {
-    parsed = parseJson(responseText);
-    return { plan: brainSchema.parse(parsed), prompt, responseText };
+    parsed = JSON.parse(responseText);
   } catch (parseError) {
-    console.warn("Initial brain response failed to parse, attempting repair:", parseError);
-    
-    const repairPrompt = [
-      "Fix the JSON to match the schema exactly. Return JSON only.",
-      brainSchemaJson,
-      "",
-      "Broken response:",
-      responseText
-    ].join("\n");
-
-    const repairResponse = await fetchWithTimeout(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: "You are a strict JSON repair tool. Output JSON only."
-            },
-            { role: "user", content: repairPrompt }
-          ],
-          temperature: 0
-        })
-      },
-      TIMEOUTS.LONG
-    );
-
-    if (!repairResponse.ok) {
-      const text = await repairResponse.text();
-      throw new Error(`OpenAI repair error: ${text}`);
-    }
-
-    const repairRaw = (await repairResponse.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const repairText = repairRaw.choices?.[0]?.message?.content ?? "";
-    
-    try {
-      parsed = parseJson(repairText);
-      return {
-        plan: brainSchema.parse(parsed),
-        prompt,
-        responseText: repairText
-      };
-    } catch (repairParseError) {
-      console.error("Repair also failed to parse:", repairParseError);
-      throw new Error(`Failed to parse LLM response after repair attempt: ${repairParseError instanceof Error ? repairParseError.message : "Unknown error"}`);
-    }
+    console.error("[brain] Failed to parse JSON:", parseError);
+    throw new Error(`Failed to parse brain response: ${parseError instanceof Error ? parseError.message : "Unknown"}`);
   }
+
+  return {
+    plan: parsed,
+    prompt: fullSystemPrompt + "\n\n" + userContent,
+    responseText
+  };
 }

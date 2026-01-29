@@ -6,7 +6,8 @@ import {
   renderStatic,
   renderMontage,
   renderAudioSnippet,
-  resolveFfprobe
+  resolveFfprobe,
+  TextOverlaySettings
 } from "./ffmpegRender";
 import { createHash } from "crypto";
 import { execFile } from "child_process";
@@ -149,6 +150,17 @@ export async function renderPostPlan(postPlanId: string) {
   const onscreenText = plan.onscreenText ?? "";
   console.log(`[renderPostPlan] Rendering with text: "${onscreenText}"`);
 
+  // Extract text overlay settings
+  const textSettings: TextOverlaySettings = {
+    font_size: rules.text_overlay.font_size,
+    margin_x: rules.text_overlay.margin_x,
+    margin_top: rules.text_overlay.margin_top,
+    box_opacity: rules.text_overlay.box_opacity,
+    box_padding: rules.text_overlay.box_padding,
+    beat1_duration: rules.text_overlay.beat1_duration,
+    beat2_duration: rules.text_overlay.beat2_duration
+  };
+
   if (plan.container === "montage") {
     const [minDur, maxDur] = rules.montage.clip_duration_range;
     const totalDuration = Math.max(1, snippet.durationSec);
@@ -166,18 +178,30 @@ export async function renderPostPlan(postPlanId: string) {
       onscreenText,
       concatFilePath,
       clipDurations: montagePlan.durations
-    });
+    }, textSettings);
   } else {
     await renderStatic({
       clipPaths,
       audioPath,
       outputPath,
-      onscreenText
-    });
+      onscreenText,
+      targetDurationSec: snippet.durationSec
+    }, textSettings);
   }
 
   const buffer = await readFile(outputPath);
   const renderHash = createHash("sha256").update(buffer).digest("hex");
+  const existing = await prisma.postPlan.findFirst({
+    where: { renderHash, id: { not: postPlanId } },
+    select: { id: true }
+  });
+  if (existing) {
+    await prisma.postPlan.update({
+      where: { id: postPlanId },
+      data: { status: "FAILED" }
+    });
+    throw new Error("Duplicate render detected");
+  }
 
   await prisma.postPlan.update({
     where: { id: postPlanId },

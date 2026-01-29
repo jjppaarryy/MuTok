@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { getRulesSettings } from "./settings";
 
-type TikTokVideo = {
+export type TikTokVideo = {
   id?: string;
   video_id?: string;
   desc?: string;
@@ -139,6 +139,9 @@ export async function upsertMetrics(params: {
   metrics: TikTokMetrics;
   createTime?: number;
   rewardScore?: number;
+  view2Rate?: number;
+  view6Rate?: number;
+  retentionRate?: number;
   followerDelta?: number;
 }) {
   const existing = await prisma.metric.findFirst({
@@ -155,6 +158,9 @@ export async function upsertMetrics(params: {
     likes: params.metrics.likes ?? 0,
     comments: params.metrics.comments ?? 0,
     shares: params.metrics.shares ?? 0,
+    view2Rate: params.view2Rate,
+    view6Rate: params.view6Rate,
+    retentionRate: params.retentionRate,
     rewardScore: params.rewardScore,
     followerDelta: params.followerDelta,
     collectedAt: new Date()

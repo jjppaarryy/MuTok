@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
-import { getPendingShareCount24h } from "../../../../lib/queue";
+import { getDailyDraftUploadCount, getPendingShareCount24h } from "../../../../lib/queue";
 import { getSchedulerStatus } from "../../../../lib/schedulerState";
 import { getCooldown } from "../../../../lib/tiktokSettings";
+import { getRulesSettings } from "../../../../lib/settings";
+import { getRecoveryStatus } from "../../../../lib/recoveryMode";
 
 export async function GET() {
   const [
@@ -11,8 +13,10 @@ export async function GET() {
     approvedSnippets,
     draftCount,
     pendingCount,
+    dailyUploads,
     auth,
-    cooldownUntil
+    cooldownUntil,
+    recovery
   ] =
     await Promise.all([
       prisma.clip.count(),
@@ -20,8 +24,10 @@ export async function GET() {
       prisma.snippet.count({ where: { approved: true } }),
       prisma.postPlan.count({ where: { status: "UPLOADED_DRAFT" } }),
       getPendingShareCount24h(),
+      getDailyDraftUploadCount(),
       prisma.tikTokAuth.findFirst(),
-      getCooldown()
+      getCooldown(),
+      getRulesSettings().then((rules) => getRecoveryStatus(rules))
     ]);
 
   return NextResponse.json({
@@ -30,9 +36,11 @@ export async function GET() {
     approvedSnippets,
     draftCount,
     pendingCount,
+    dailyUploads,
     authConnected: Boolean(auth),
     authExpiresAt: auth?.expiresAt ?? null,
     scheduler: getSchedulerStatus(),
-    uploadCooldownUntil: cooldownUntil
+    uploadCooldownUntil: cooldownUntil,
+    recovery
   });
 }

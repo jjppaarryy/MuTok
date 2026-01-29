@@ -1,48 +1,35 @@
 import { prisma } from "./prisma";
-import { computeCompatibility } from "../../../packages/core/src/scoring";
 import { getRulesSettings } from "./settings";
 import { getEnabledHookRecipes } from "./hookRecipes";
-import { pickMany, pickRandom, safeCategories } from "./plannerUtils";
+import { pickRandom, safeCategories } from "./plannerUtils";
 import { recordArmUse } from "./optimizer";
 import { logRunEvent } from "./logs";
-import { maybeTriggerMutations } from "./optimiserSignals";
-import { getConfig } from "./config";
-import {
-  buildCaption,
-  selectClip,
-  selectContainer,
-  selectCta,
-  selectRecipe,
-  selectSnippet,
-  selectVariant
-} from "./planSelection";
-import { ensureTwoBeat } from "./brainRepair";
-
+import { buildClipSet, buildOnscreenAndCaption, evaluateCompatibility, isMontageTemplateBlocked } from "./plannerCoreUtils";
+import { getRecoveryStatus } from "./recoveryMode";
+import { applyRecoveryRules } from "./plannerRecovery";
+import { selectContainer, selectRecipe, selectSnippet } from "./planSelection";
+import { getTodayContainerCounts, getSnippetStyle, getSnippetStrategy, isCommentCta, pickContainerForSlot, pickFixedBeat, updateContainerCounts } from "./plannerCoreHelpers";
+import { buildCooldownState, filterRecipesByCooldown, filterSnippetsByCooldown } from "./plannerCooldowns";
 type PlanResult = { createdIds: string[]; warnings: string[] };
+const isAntiAlgoText = (text: string) => {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("algo") ||
+    normalized.includes("algorithm") ||
+    normalized.includes("not trending") ||
+    normalized.includes("not pushed")
+  );
+};
 export async function buildPlans(
   count: number,
   options?: { scheduledFor?: Date }
 ): Promise<PlanResult> {
   const warnings: string[] = [];
   const createdIds: string[] = [];
-  let fallbackPlan: null | {
-    container: string;
-    clipIds: string[];
-    trackId: string;
-    snippetId: string;
-    snippetStartSec: number;
-    snippetDurationSec: number;
-    onscreenText: string;
-    caption: string;
-    hookFamily: string;
-    recipeId: string;
-    variantId: string;
-    ctaId: string | null;
-    compatibilityScore: number;
-    reasons: string[];
-  } = null;
-  const openAiApiKey = await getConfig("OPENAI_API_KEY");
-  const rules = await getRulesSettings();
+  const baseRules = await getRulesSettings();
+  const recovery = await getRecoveryStatus(baseRules);
+  const rules = applyRecoveryRules(baseRules, recovery);
+  if (recovery.active) warnings.push("Recovery mode active: cadence and CTAs limited.");
   const clips = await prisma.clip.findMany({ orderBy: { createdAt: "desc" } });
   const snippets = await prisma.snippet.findMany({ where: { approved: true } });
   const tracks = await prisma.track.findMany();
@@ -80,59 +67,56 @@ export async function buildPlans(
   const recipes = await getEnabledHookRecipes();
   if (recipes.length === 0) {
     console.warn("[planner] No hook recipes enabled.");
-    return { createdIds, warnings: ["No hook recipes enabled."] };
+    const result = { createdIds, warnings: ["No hook recipes enabled."] };
+    return result;
   }
-  await maybeTriggerMutations({
-    recipes,
-    allowedIntents: viral.allowed_cta_types,
-    rules
-  });
+  const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
+  const snippetById = new Map(snippets.map((snippet) => [snippet.id, snippet]));
+  const cooldownState = await buildCooldownState(rules, recipeById, snippetById);
+  const eligibleMontageClips = montageEligible.filter(
+    (clip) => !cooldownState.recentClipIds.has(clip.id)
+  );
+  const eligibleSafeClips = safeClips.filter(
+    (clip) => !cooldownState.recentClipIds.has(clip.id)
+  );
+  let todayContainerCounts = await getTodayContainerCounts();
+  let todayCommentCtaCount = cooldownState.todayCommentCtaCount;
   for (let i = 0; i < count; i += 1) {
     const containerSelection = await selectContainer(containers, rules);
-    let container = containerSelection.value;
-    let clipSet: typeof clips = [];
-    if (container === "montage" && montageEligible.length < rules.montage.clip_count) {
-      if (containers.includes("static_daw")) {
-        container = "static_daw";
-      } else {
-        const msg = "Not enough eligible clips for montage.";
-        console.warn(`[planner] ${msg}`);
-        warnings.push(msg);
-        continue;
-      }
+    const preferredContainer = pickContainerForSlot(todayContainerCounts);
+    let containerRelaxed = false;
+    let container =
+      containers.includes(preferredContainer) ? preferredContainer : containerSelection.value;
+    const clipSelection = await buildClipSet({
+      container,
+      containers,
+      rules,
+      eligibleMontageClips,
+      eligibleSafeClips,
+      clips
+    });
+    container = clipSelection.container;
+    containerRelaxed = clipSelection.containerRelaxed;
+    if (clipSelection.warning) {
+      console.warn(`[planner] ${clipSelection.warning}`);
+      warnings.push(clipSelection.warning);
+      continue;
     }
-    if (container === "montage") {
-      const dawAnchors = montageEligible.filter((clip) => clip.category === "DAW_screen");
-      let firstClip = null as typeof montageEligible[number] | null;
-      if (dawAnchors.length > 0) {
-        const selection = await selectClip(dawAnchors.map((clip) => clip.id), rules);
-        firstClip = dawAnchors.find((clip) => clip.id === selection.value) ?? pickRandom(dawAnchors);
-      }
-      const remainingPool = montageEligible.filter((clip) => clip.id !== firstClip?.id);
-      const neededClips = Math.max(0, rules.montage.clip_count - (firstClip ? 1 : 0));
-      const rest: typeof montageEligible = [];
-      let pool = [...remainingPool];
-      while (pool.length > 0 && rest.length < neededClips) {
-        const selection = await selectClip(pool.map((clip) => clip.id), rules);
-        const picked = pool.find((clip) => clip.id === selection.value) ?? pickRandom(pool);
-        rest.push(picked);
-        pool = pool.filter((clip) => clip.id !== picked.id);
-      }
-      clipSet = firstClip ? [firstClip, ...rest] : rest;
-    } else {
-      const basePool = safeClips.length ? safeClips : clips;
-      const selection = await selectClip(basePool.map((clip) => clip.id), rules);
-      const picked = basePool.find((clip) => clip.id === selection.value) ?? pickRandom(basePool);
-      clipSet = picked ? [picked] : [];
-    }
-    if (clipSet.length === 0) {
-      const msg = "No eligible clips for container.";
+    const clipSet = clipSelection.clipSet;
+    cooldownState.todayCommentCtaCount = todayCommentCtaCount;
+    const recipeFilter = filterRecipesByCooldown(rules, recipes, cooldownState);
+    if (recipeFilter.recipes.length === 0) {
+      const msg = "No eligible recipes after cooldown filters.";
       console.warn(`[planner] ${msg}`);
       warnings.push(msg);
       continue;
     }
-    const recipeSelection = await selectRecipe(recipes.map((recipe) => recipe.id), rules);
-    const selectedRecipe = recipes.find((recipe) => recipe.id === recipeSelection.value) ?? recipes[0];
+    if (recipeFilter.relaxedPrefix) warnings.push("Beat1 prefix cooldown relaxed.");
+    if (recipeFilter.relaxedAntiAlgo) warnings.push("Anti-algo cap relaxed.");
+    if (recipeFilter.relaxedCta) warnings.push("CTA streak cap relaxed.");
+    const recipeSelection = await selectRecipe(recipeFilter.recipes.map((recipe) => recipe.id), rules);
+    const selectedRecipe =
+      recipeFilter.recipes.find((recipe) => recipe.id === recipeSelection.value) ?? recipeFilter.recipes[0];
     const disallowedContainers = Array.isArray(selectedRecipe.disallowedContainers)
       ? (selectedRecipe.disallowedContainers as string[])
       : [];
@@ -163,10 +147,17 @@ export async function buildPlans(
       }
       return true;
     });
-    const snippetPool = eligibleForRecipe.length ? eligibleForRecipe : eligibleSnippets;
-    const snippetSelection = await selectSnippet(snippetPool.map((item) => item.id), rules);
-    const snippet =
-      snippetPool.find((item) => item.id === snippetSelection.value) ?? pickRandom(snippetPool);
+    let snippetPool = eligibleForRecipe.length ? eligibleForRecipe : eligibleSnippets;
+    const snippetFilter = filterSnippetsByCooldown(rules, snippetPool, cooldownState);
+    snippetPool = snippetFilter.snippets;
+    if (snippetFilter.relaxed) {
+      warnings.push("Snippet cooldown relaxed.");
+    }
+    const snippetSelection = await selectSnippet(
+      snippetPool.map((item) => ({ id: item.id, moment3to7: item.moment3to7, moment7to11: item.moment7to11 })),
+      rules
+    );
+    const snippet = snippetPool.find((item) => item.id === snippetSelection.value) ?? pickRandom(snippetPool);
     const track = tracks.find((item) => item.id === snippet.trackId);
     if (!track) {
       const msg = "Snippet missing track reference.";
@@ -174,110 +165,32 @@ export async function buildPlans(
       warnings.push(msg);
       continue;
     }
-    const compatibilities = clipSet.map((clip) =>
-      computeCompatibility(
-        {
-          id: clip.id,
-          energy: clip.energy,
-          motion: clip.motion as "low" | "med" | "high",
-          sync: clip.sync as "safe" | "sensitive" | "critical",
-          category: clip.category,
-          vibe: clip.vibe
-        },
-        {
-          id: snippet.id,
-          energyScore: snippet.energyScore,
-          energy: snippet.energy,
-          section: snippet.section,
-          vibe: snippet.vibe
-        },
-        { disallowHandsKeysLiteral: !rules.guardrails.allow_hands_keys_literal }
-      )
-    );
-    const blocked = compatibilities.some((result) => result.blocked);
-    const score = Math.min(...compatibilities.map((result) => result.score));
-    const reasons = compatibilities.flatMap((result) => result.reasons);
-    if (clipSet.some((clip) => clip.sync === "sensitive")) {
-      reasons.push("Contains sensitive sync clip(s)");
-    }
-    const ctaSelection = await selectCta(viral.allowed_cta_types, rules);
-    const cta = ctaSelection?.value ?? null;
-    const variantSelection = await selectVariant({
-      recipeId: selectedRecipe.id,
-      recipeBeat1: selectedRecipe.beat1Templates,
-      recipeBeat2: selectedRecipe.beat2Templates,
-      ctaId: cta?.id ?? null,
+    const { blocked, score, reasons } = evaluateCompatibility(clipSet, snippet, rules);
+    const beat1 = pickFixedBeat(selectedRecipe.beat1Templates);
+    const beat2 = pickFixedBeat(selectedRecipe.beat2Templates);
+    const textResult = buildOnscreenAndCaption({
+      beat1,
+      beat2,
+      captionTemplate: selectedRecipe.captionTemplate,
       rules
     });
-    if (!variantSelection) {
-      const msg = "No valid variant found for recipe.";
+    if (textResult.warning) {
+      console.warn(`[planner] ${textResult.warning}`);
+      warnings.push(textResult.warning);
+      continue;
+    }
+    if (isMontageTemplateBlocked(container, clipSet, cooldownState)) {
+      const msg = "Montage template cooldown active.";
       console.warn(`[planner] ${msg}`);
       warnings.push(msg);
       continue;
     }
-    const variant = variantSelection.value;
-    let onscreenText = `${variant.beat1}\n${variant.beat2}`;
-    if (rules.guardrails.max_lines > 0) {
-      const lines = onscreenText.split("\n").filter(Boolean);
-      if (lines.length > rules.guardrails.max_lines) {
-        const msg = "On-screen text exceeds guardrail max lines.";
-        console.warn(`[planner] ${msg}`);
-        warnings.push(msg);
-        continue;
-      }
-    }
-    if (viral.require_two_beats && !onscreenText.includes("\n")) {
-      const msg = "Two-beat text required but template missing beats.";
-      console.warn(`[planner] ${msg}`);
-      warnings.push(msg);
-      continue;
-    }
-    const repair = await ensureTwoBeat({
-      onscreenText,
-      caption: "",
-      hookFamily: selectedRecipe.name,
-      container,
-      allowedIntents: viral.allowed_cta_types,
-      snippet: {
-        moment3to7: snippet.moment3to7,
-        moment7to11: snippet.moment7to11
-      },
-      bannedWords: [
-        ...rules.guardrails.banned_words,
-        ...rules.guardrails.banned_phrases
-      bannedWords,
-      openAiApiKey,
-      model: process.env.OPENAI_MODEL ?? "gpt-4o"
-    });
-    if (repair.repairApplied) {
-      onscreenText = repair.onscreenText;
-    }
-    const caption = buildCaption(rules);
+    const onscreenText = textResult.onscreenText!;
+    const caption = textResult.caption!;
     if (blocked || score < rules.min_compatibility_score - 0.001) {
       const msg = `Clip set + snippet ${snippet.id} below compatibility (score: ${score.toFixed(2)}, min: ${rules.min_compatibility_score})`;
       console.warn(`[planner] ${msg}`);
       warnings.push(msg);
-      if (!blocked) {
-        const nextFallback = {
-          container,
-          clipIds: clipSet.map((clip) => clip.id),
-          trackId: track.id,
-          snippetId: snippet.id,
-          snippetStartSec: snippet.startSec,
-          snippetDurationSec: snippet.durationSec,
-          onscreenText,
-          caption,
-          hookFamily: selectedRecipe.name,
-          recipeId: selectedRecipe.id,
-          variantId: variant.id,
-          ctaId: cta?.id ?? null,
-          compatibilityScore: score,
-          reasons: cta ? [...reasons, `CTA: ${cta.intent}`] : reasons
-        };
-        if (!fallbackPlan || nextFallback.compatibilityScore > fallbackPlan.compatibilityScore) {
-          fallbackPlan = nextFallback;
-        }
-      }
       continue;
     }
     const plan = await prisma.postPlan.create({
@@ -293,65 +206,69 @@ export async function buildPlans(
         caption,
         hookFamily: selectedRecipe.name,
         recipeId: selectedRecipe.id,
-        variantId: variant.id,
-        ctaId: cta?.id ?? null,
+        variantId: null,
+        ctaId: null,
         experimentFlags: {
+          cooldown_relaxed:
+            recipeFilter.relaxed || snippetFilter.relaxed || containerRelaxed,
+          snippet_relaxed: snippetFilter.relaxed,
+          container_relaxed: containerRelaxed,
           tested_recipe: rules.optimiser_policy.test_dimensions.recipe,
-          tested_variant: rules.optimiser_policy.test_dimensions.variant,
-          tested_cta: rules.optimiser_policy.test_dimensions.cta,
           tested_container: rules.optimiser_policy.test_dimensions.container,
           comparisonMode: false,
           optionsCount: 1,
           selection: {
             recipe: recipeSelection.mode,
-            variant: variantSelection.mode,
-            cta: ctaSelection?.mode ?? "exploit",
             container: containerSelection.mode
           }
         },
         compatibilityScore: score,
-        reasons: cta ? [...reasons, `CTA: ${cta.intent}`] : reasons,
+        reasons,
         status: "PLANNED"
       }
     });
     await recordArmUse("RECIPE", selectedRecipe.id);
-    await recordArmUse("VARIANT", variant.id);
-    if (cta) await recordArmUse("CTA", cta.id);
     await recordArmUse("CONTAINER", container);
-    await recordArmUse("SNIPPET", snippet.id);
+    await recordArmUse("SNIPPET_STRATEGY", getSnippetStrategy(snippet));
     for (const clip of clipSet) {
-      await recordArmUse("CLIP", clip.id);
+      await recordArmUse("CLIP_CATEGORY", clip.category);
     }
     createdIds.push(plan.id);
-  }
-  if (createdIds.length === 0 && fallbackPlan) {
-    const plan = await prisma.postPlan.create({
-      data: {
-        scheduledFor: options?.scheduledFor ?? new Date(),
-        container: fallbackPlan.container,
-        clipIds: fallbackPlan.clipIds,
-        trackId: fallbackPlan.trackId,
-        snippetId: fallbackPlan.snippetId,
-        snippetStartSec: fallbackPlan.snippetStartSec,
-        snippetDurationSec: fallbackPlan.snippetDurationSec,
-        onscreenText: fallbackPlan.onscreenText,
-        caption: fallbackPlan.caption,
-        hookFamily: fallbackPlan.hookFamily,
-        recipeId: fallbackPlan.recipeId,
-        variantId: fallbackPlan.variantId,
-        ctaId: fallbackPlan.ctaId,
-        experimentFlags: {
-          fallbackApplied: true,
-          comparisonMode: false,
-          optionsCount: 1
-        },
-        compatibilityScore: fallbackPlan.compatibilityScore,
-        reasons: fallbackPlan.reasons,
-        status: "PLANNED"
-      }
-    });
-    createdIds.push(plan.id);
-    warnings.push("Fallback plan created below compatibility threshold.");
+    todayContainerCounts = updateContainerCounts(todayContainerCounts, container);
+    if (isCommentCta(selectedRecipe.ctaType)) {
+      todayCommentCtaCount += 1;
+    }
+    cooldownState.recentRecipeIds.add(selectedRecipe.id);
+    cooldownState.recentSnippetIds.add(snippet.id);
+    cooldownState.recentTrackIds.add(track.id);
+    for (const clip of clipSet) {
+      cooldownState.recentClipIds.add(clip.id);
+    }
+    if (container === "montage") {
+      cooldownState.recentMontageTemplates.add(clipSet.map((clip) => clip.id).join("|"));
+    }
+    cooldownState.recentCtaIntents.unshift(selectedRecipe.ctaType);
+    cooldownState.recentCtaIntents.splice(rules.spam_guardrails.max_same_cta_intent_in_row + 2);
+    cooldownState.hookFamilyDayCounts.set(
+      selectedRecipe.name,
+      (cooldownState.hookFamilyDayCounts.get(selectedRecipe.name) ?? 0) + 1
+    );
+    cooldownState.hookFamilyWeekCounts.set(
+      selectedRecipe.name,
+      (cooldownState.hookFamilyWeekCounts.get(selectedRecipe.name) ?? 0) + 1
+    );
+    if (isAntiAlgoText(`${selectedRecipe.name} ${beat1} ${caption}`)) {
+      cooldownState.antiAlgoWeekCount += 1;
+    }
+    cooldownState.recentCaptions.add(caption.toLowerCase());
+    cooldownState.recentBeat1.add(beat1.toLowerCase());
+    cooldownState.recentBeat2.add(beat2.toLowerCase());
+    cooldownState.recentBeat1Prefixes.add(beat1.split(/\s+/).slice(0, rules.spam_guardrails.beat1_prefix_words).join(" ").toLowerCase());
+    const style = getSnippetStyle(snippet);
+    cooldownState.snippetStyleDayCounts.set(
+      style,
+      (cooldownState.snippetStyleDayCounts.get(style) ?? 0) + 1
+    );
   }
   if (warnings.length > 0) {
     await logRunEvent({
@@ -362,3 +279,4 @@ export async function buildPlans(
   }
   return { createdIds, warnings };
 }
+

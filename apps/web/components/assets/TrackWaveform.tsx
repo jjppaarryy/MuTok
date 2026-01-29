@@ -1,16 +1,38 @@
 import { useEffect, useRef, useState } from "react";
-import ActionButton from "../ActionButton";
-
-const formatTime = (value: number) => {
-  if (!Number.isFinite(value)) return "0:00";
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.floor(value % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-};
+import TrackWaveformView from "./TrackWaveformView";
 
 type TrackWaveformProps = {
   trackId: string;
   onAddSnippet: (trackId: string, startSec: number, durationSec: number) => Promise<void>;
+};
+
+type WaveRegion = {
+  id?: string;
+  start: number;
+  end: number;
+  remove?: () => void;
+};
+
+type RegionsApi = {
+  enableDragSelection?: (options: { color: string }) => void;
+  disableDragSelection?: () => void;
+  clearRegions?: () => void;
+  getRegions?: () => WaveRegion[];
+  regions?: Record<string, WaveRegion>;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+};
+
+type WaveSurferInstance = {
+  destroy?: () => void;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  play?: () => void;
+  pause?: () => void;
+  playPause?: () => void;
+  setTime?: (time: number) => void;
+  seekTo?: (progress: number) => void;
+  getDuration?: () => number;
+  isReady?: () => boolean;
+  registerPlugin?: (plugin: unknown) => RegionsApi | null;
 };
 
 export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformProps) {
@@ -25,13 +47,13 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
   const [playheadRatio, setPlayheadRatio] = useState<number | null>(null);
   const [waveKey, setWaveKey] = useState<number>(0);
   const waveformRef = useRef<HTMLDivElement | null>(null);
-  const regionsRef = useRef<any>(null);
-  const waveRef = useRef<any>(null);
-  const activeRegionRef = useRef<any>(null);
+  const regionsRef = useRef<RegionsApi | null>(null);
+  const waveRef = useRef<WaveSurferInstance | null>(null);
+  const activeRegionRef = useRef<WaveRegion | null>(null);
   const stopTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let wave: any;
+    let waveInstance: WaveSurferInstance | null = null;
     let mounted = true;
 
     const setup = async () => {
@@ -43,9 +65,12 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
       waveformRef.current.innerHTML = "";
       const WaveSurfer = (await import("wavesurfer.js")).default;
       const RegionsPluginModule = await import("wavesurfer.js/dist/plugins/regions.esm.js");
-      const RegionsPlugin = (RegionsPluginModule as any).default ?? RegionsPluginModule;
+      type RegionsPluginFactory = { create?: (options?: Record<string, unknown>) => unknown };
+      const RegionsPlugin =
+        (RegionsPluginModule as { default?: RegionsPluginFactory }).default ??
+        (RegionsPluginModule as RegionsPluginFactory);
 
-      wave = WaveSurfer.create({
+      const wave = WaveSurfer.create({
         container: waveformRef.current,
         waveColor: "#e2e8f0",
         progressColor: "#94a3b8",
@@ -58,36 +83,36 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
         barGap: 1,
         barHeight: 0.9,
         barAlign: "bottom",
-        splitChannels: false,
         normalize: true,
         url: `/api/assets/track/${trackId}/file`
-      });
+      }) as unknown as WaveSurferInstance;
 
+      waveInstance = wave;
       waveRef.current = wave;
       const regions = RegionsPlugin?.create
-        ? wave.registerPlugin(RegionsPlugin.create({ maxRegions: 1 }))
+        ? wave.registerPlugin?.(RegionsPlugin.create({ maxRegions: 1 }))
         : null;
       if (!regions) {
         if (mounted) setLoadingWave(false);
         return;
       }
       regionsRef.current = regions;
-      regions.enableDragSelection({ color: "rgba(254, 44, 85, 0.18)" });
+      regions.enableDragSelection?.({ color: "rgba(254, 44, 85, 0.18)" });
 
-      wave.on("ready", () => {
+      wave.on?.("ready", () => {
         if (mounted) setLoadingWave(false);
         if (pendingPlay) {
           const start = pendingPlay.start;
           const end = pendingPlay.end;
-          wave.setTime(start);
-          wave.play();
+          wave.setTime?.(start);
+          wave.play?.();
           stopTimerRef.current = window.setTimeout(() => {
             wave.pause?.();
           }, Math.max(0.2, end - start) * 1000);
           setPendingPlay(null);
         }
       });
-      wave.on("error", () => {
+      wave.on?.("error", () => {
         if (mounted) setLoadingWave(false);
       });
 
@@ -97,29 +122,35 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
         setRegionCount(count);
       };
 
-      const onRegionCreated = (region: any) => {
+      const onRegionCreated = (region: unknown) => {
+        const regionData = region as WaveRegion | null;
+        if (!regionData) return;
         const regionsList = regions.getRegions?.() ?? Object.values(regions.regions ?? {});
-        for (const existing of regionsList) {
-          if (existing.id !== region.id) {
-            existing.remove();
+        for (const existing of regionsList as WaveRegion[]) {
+          if (existing.id !== regionData.id) {
+            existing.remove?.();
           }
         }
-        activeRegionRef.current = region;
-        setSelection({ start: region.start, end: region.end });
-        setSelectionDuration(Math.max(0, region.end - region.start));
+        activeRegionRef.current = regionData;
+        setSelection({ start: regionData.start, end: regionData.end });
+        setSelectionDuration(Math.max(0, regionData.end - regionData.start));
         updateRegionCount();
         regionsRef.current?.disableDragSelection?.();
       };
-      const onRegionUpdated = (region: any) => {
-        activeRegionRef.current = region;
-        setSelection({ start: region.start, end: region.end });
-        setSelectionDuration(Math.max(0, region.end - region.start));
+      const onRegionUpdated = (region: unknown) => {
+        const regionData = region as WaveRegion | null;
+        if (!regionData) return;
+        activeRegionRef.current = regionData;
+        setSelection({ start: regionData.start, end: regionData.end });
+        setSelectionDuration(Math.max(0, regionData.end - regionData.start));
         updateRegionCount();
       };
-      const onRegionClicked = (region: any) => {
-        activeRegionRef.current = region;
-        setSelection({ start: region.start, end: region.end });
-        setSelectionDuration(Math.max(0, region.end - region.start));
+      const onRegionClicked = (region: unknown) => {
+        const regionData = region as WaveRegion | null;
+        if (!regionData) return;
+        activeRegionRef.current = regionData;
+        setSelection({ start: regionData.start, end: regionData.end });
+        setSelectionDuration(Math.max(0, regionData.end - regionData.start));
       };
       const onRegionRemoved = () => {
         setSelection(null);
@@ -135,22 +166,24 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
         regions.on("region-clicked", onRegionClicked);
         regions.on("region-removed", onRegionRemoved);
       } else {
-        wave.on("region-created", onRegionCreated);
-        wave.on("region-updated", onRegionUpdated);
-        wave.on("region-clicked", onRegionClicked);
-        wave.on("region-removed", onRegionRemoved);
+        wave.on?.("region-created", onRegionCreated);
+        wave.on?.("region-updated", onRegionUpdated);
+        wave.on?.("region-clicked", onRegionClicked);
+        wave.on?.("region-removed", onRegionRemoved);
       }
-      wave.on("play", () => setIsPlaying(true));
-      wave.on("pause", () => setIsPlaying(false));
-      wave.on("finish", () => setIsPlaying(false));
-      wave.on("audioprocess", (time: number) => {
+      wave.on?.("play", () => setIsPlaying(true));
+      wave.on?.("pause", () => setIsPlaying(false));
+      wave.on?.("finish", () => setIsPlaying(false));
+      wave.on?.("audioprocess", (time: unknown) => {
+        const numericTime = typeof time === "number" ? time : 0;
         const duration = wave.getDuration?.() ?? 0;
         if (duration > 0) {
-          setPlayheadRatio(Math.min(1, Math.max(0, time / duration)));
+          setPlayheadRatio(Math.min(1, Math.max(0, numericTime / duration)));
         }
       });
-      wave.on("seek", (progress: number) => {
-        setPlayheadRatio(Math.min(1, Math.max(0, progress)));
+      wave.on?.("seek", (progress: unknown) => {
+        const ratio = typeof progress === "number" ? progress : 0;
+        setPlayheadRatio(Math.min(1, Math.max(0, ratio)));
       });
     };
 
@@ -162,7 +195,7 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
         window.clearTimeout(stopTimerRef.current);
         stopTimerRef.current = null;
       }
-      if (wave) wave.destroy();
+      if (waveInstance) waveInstance.destroy?.();
       if (waveformRef.current) {
         waveformRef.current.innerHTML = "";
       }
@@ -170,11 +203,11 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
     };
   }, [trackId, waveKey]);
 
-  const getRegionsList = () => {
+  const getRegionsList = (): WaveRegion[] => {
     const regionsApi = regionsRef.current;
     if (!regionsApi) return [];
     if (regionsApi.getRegions) return regionsApi.getRegions();
-    if (regionsApi.regions) return Object.values(regionsApi.regions);
+    if (regionsApi.regions) return Object.values(regionsApi.regions) as WaveRegion[];
     return [];
   };
 
@@ -189,183 +222,84 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
       setPendingPlay({ start, end });
       return;
     }
-    waveRef.current.setTime(start);
+    waveRef.current.setTime?.(start);
     waveRef.current.seekTo?.(start / Math.max(1, waveRef.current.getDuration?.() ?? 1));
-    waveRef.current.play();
+    waveRef.current.play?.();
     stopTimerRef.current = window.setTimeout(() => {
       waveRef.current?.pause?.();
     }, Math.max(0.2, end - start) * 1000);
   };
 
+  const handlePlaySelection = () => {
+    const regions = getRegionsList();
+    const region = regions[0] ?? activeRegionRef.current ?? selection;
+    if (!region || !waveRef.current) {
+      waveRef.current?.playPause?.();
+      return;
+    }
+    const start = Number(region.start);
+    const end = Number(region.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+    playRange(start, end);
+  };
+
+  const handleSaveSnippet = async () => {
+    setSaveMessage(null);
+    setSaveError(null);
+    const regions = getRegionsList();
+    const region = regions[0] ?? activeRegionRef.current ?? selection;
+    if (!region) {
+      setSaveError(
+        `Select a section first. (regions=${regions.length}, selection=${selection ? "yes" : "no"})`
+      );
+      return;
+    }
+    const start = Number(region.start);
+    const end = Number(region.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
+    const duration = Math.max(1, end - start);
+    try {
+      await onAddSnippet(trackId, start, duration);
+      regionsRef.current?.clearRegions?.();
+      setSelection(null);
+      setRegionCount(0);
+      activeRegionRef.current = null;
+      setSelectionDuration(null);
+      setSaveMessage("Snippet saved.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Save failed.");
+    }
+  };
+
+  const handleClearSelection = () => {
+    const regions = getRegionsList();
+    regions.forEach((region) => region.remove?.());
+    regionsRef.current?.clearRegions?.();
+    setSelection(null);
+    setRegionCount(0);
+    activeRegionRef.current = null;
+    setSelectionDuration(null);
+    setPlayheadRatio(null);
+    setSaveMessage(null);
+    setSaveError(null);
+    setWaveKey((prev) => prev + 1);
+  };
+
   return (
-    <div className="mt-8 rounded-2xl bg-white px-5 py-5" style={{ position: "relative" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Manual snippet picker</div>
-      <div style={{ marginTop: 6, fontSize: 13, color: "#94a3b8" }}>
-        Drag across the wave to pick a section, then save it.
-      </div>
-      <div className="mt-4" style={{ position: "relative" }}>
-        <div
-          key={waveKey}
-          ref={waveformRef}
-          style={{
-            height: 128,
-            borderRadius: 12,
-            backgroundColor: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            position: "relative",
-            zIndex: 1,
-            overflow: "hidden",
-            pointerEvents: "auto"
-          }}
-        />
-        {playheadRatio != null ? (
-          <div
-            style={{
-              position: "absolute",
-              top: 8,
-              bottom: 8,
-              left: `${playheadRatio * 100}%`,
-              width: 2,
-              backgroundColor: "#94a3b8",
-              borderRadius: 2,
-              transform: "translateX(-1px)",
-              zIndex: 2,
-              pointerEvents: "none"
-            }}
-          />
-        ) : null}
-        {selectionDuration != null ? (
-          <div
-            style={{
-              position: "absolute",
-              top: 10,
-              right: 12,
-              padding: "6px 10px",
-              borderRadius: 999,
-              backgroundColor: "#0f172a",
-              color: "#f8fafc",
-              fontSize: 12,
-              fontWeight: 700
-            }}
-          >
-            {selectionDuration.toFixed(1)}s
-          </div>
-        ) : null}
-        {loadingWave ? <div className="mt-3 text-sm text-slate-500">Loading waveform…</div> : null}
-      </div>
-      <div
-        className="mt-4 flex flex-wrap items-center gap-3"
-        style={{ position: "relative", zIndex: 2, fontSize: 13, color: "#64748b" }}
-      >
-        <span>
-          {selection
-            ? `Selected ${formatTime(selection.start)}–${formatTime(selection.end)} (${Math.max(
-                0,
-                selection.end - selection.start
-              ).toFixed(1)}s)`
-            : "Drag across the wave to pick a moment."}
-        </span>
-      </div>
-      <div
-        style={{
-          marginTop: 16,
-          marginBottom: 24,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-          alignItems: "center",
-          position: "relative",
-          zIndex: 2,
-          pointerEvents: "auto"
-        }}
-      >
-        <ActionButton
-          label={isPlaying ? "Pause" : "Play selection"}
-          variant="outline"
-          onClick={() => {
-            const regions = getRegionsList();
-            const region = regions[0] ?? activeRegionRef.current ?? selection;
-            if (!region || !waveRef.current) {
-              waveRef.current?.playPause?.();
-              return;
-            }
-            const start = Number(region.start);
-            const end = Number(region.end);
-            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
-            playRange(start, end);
-          }}
-        />
-        <ActionButton
-          label="Save snippet"
-          onClick={async () => {
-            setSaveMessage(null);
-            setSaveError(null);
-            const regions = getRegionsList();
-            const region = regions[0] ?? activeRegionRef.current ?? selection;
-            if (!region) {
-              setSaveError(
-                `Select a section first. (regions=${regions.length}, selection=${selection ? "yes" : "no"})`
-              );
-              return;
-            }
-            const start = Number(region.start);
-            const end = Number(region.end);
-            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
-            const duration = Math.max(1, end - start);
-            try {
-              await onAddSnippet(trackId, start, duration);
-              regionsRef.current?.clearRegions?.();
-              setSelection(null);
-              setRegionCount(0);
-              activeRegionRef.current = null;
-              setSelectionDuration(null);
-              setSaveMessage("Snippet saved.");
-            } catch (error) {
-              setSaveError(error instanceof Error ? error.message : "Save failed.");
-            }
-          }}
-        />
-        <ActionButton
-          label="Clear"
-          variant="ghost"
-          onClick={() => {
-            const regions = getRegionsList();
-            regions.forEach((region) => region.remove?.());
-            regionsRef.current?.clearRegions?.();
-            setSelection(null);
-            setRegionCount(0);
-            activeRegionRef.current = null;
-            setSelectionDuration(null);
-            setPlayheadRatio(null);
-            setSaveMessage(null);
-            setSaveError(null);
-            setWaveKey((prev) => prev + 1);
-          }}
-          disabled={regionCount === 0}
-        />
-      </div>
-      <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8" }}>
-        {(() => {
-          const regions = getRegionsList();
-          const region = regions[0] ?? activeRegionRef.current ?? selection;
-          if (!region) return "No selection detected.";
-          const start = Number(region.start);
-          const end = Number(region.end);
-          if (!Number.isFinite(start) || !Number.isFinite(end)) return "Selection detected.";
-          return `Selection: ${formatTime(start)}–${formatTime(end)}`;
-        })()}
-      </div>
-      {saveMessage || saveError ? (
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 13,
-            color: saveError ? "#be123c" : "#059669"
-          }}
-        >
-          {saveError ?? saveMessage}
-        </div>
-      ) : null}
-    </div>
+    <TrackWaveformView
+      waveformRef={waveformRef}
+      waveKey={waveKey}
+      selection={selection}
+      selectionDuration={selectionDuration}
+      loadingWave={loadingWave}
+      playheadRatio={playheadRatio}
+      isPlaying={isPlaying}
+      regionCount={regionCount}
+      saveMessage={saveMessage}
+      saveError={saveError}
+      onPlaySelection={handlePlaySelection}
+      onSaveSnippet={handleSaveSnippet}
+      onClearSelection={handleClearSelection}
+    />
   );
 }

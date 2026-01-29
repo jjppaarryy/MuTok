@@ -12,22 +12,35 @@ type TokenResponse = {
 const TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 
 async function exchangeToken(params: Record<string, string>) {
+  console.log("[tiktokAuth] Exchanging token with params:", Object.keys(params));
+  console.log("[tiktokAuth] code_verifier:", params.code_verifier?.slice(0, 20) + "...");
+  console.log("[tiktokAuth] code_verifier length:", params.code_verifier?.length);
+  
+  const body = new URLSearchParams(params).toString();
+  console.log("[tiktokAuth] Request body (partial):", body.slice(0, 200) + "...");
+  
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(params).toString()
+    body
   });
 
+  const text = await response.text();
+  console.log("[tiktokAuth] Response status:", response.status);
+  console.log("[tiktokAuth] Response body:", text);
+
   if (!response.ok) {
-    const text = await response.text();
     throw new Error(`TikTok token error: ${text}`);
   }
 
-  const json = (await response.json()) as { data?: TokenResponse };
-  if (!json.data) {
-    throw new Error("Missing token response data");
+  const json = JSON.parse(text) as TokenResponse & { error?: string; error_description?: string };
+  if (json.error) {
+    throw new Error(`TikTok error: ${json.error} - ${json.error_description}`);
   }
-  return json.data;
+  if (!json.access_token) {
+    throw new Error("Missing access_token in response");
+  }
+  return json;
 }
 
 export async function saveTokens(data: TokenResponse) {

@@ -1,13 +1,8 @@
 import { prisma } from "./prisma";
 
-export type ArmType = "RECIPE" | "CTA" | "CONTAINER" | "VARIANT" | "CLIP" | "SNIPPET";
+export type ArmType = "RECIPE" | "CTA" | "CONTAINER" | "VARIANT" | "CLIP" | "SNIPPET" | "CLIP_CATEGORY" | "SNIPPET_STRATEGY";
 
-const defaultCtas = [
-  { name: "KEEP/SKIP", template: "KEEP or SKIP?", intent: "KEEP_SKIP" },
-  { name: "Comment vibe", template: "What vibe is this?", intent: "COMMENT_VIBE" },
-  { name: "Follow for full", template: "Follow for the full ID.", intent: "FOLLOW_FULL" },
-  { name: "Pick A/B", template: "A or B?", intent: "PICK_AB" }
-];
+const defaultCtas = [{ name: "KEEP/SKIP", template: "KEEP or SKIP?", intent: "KEEP_SKIP" }, { name: "Comment vibe", template: "What vibe is this?", intent: "COMMENT_VIBE" }, { name: "Follow for full", template: "Follow for the full ID.", intent: "FOLLOW_FULL" }, { name: "Pick A/B", template: "A or B?", intent: "PICK_AB" }];
 
 export async function ensureDefaultCtas() {
   const count = await prisma.cta.count();
@@ -81,21 +76,44 @@ export async function selectArm(
   };
 }
 
+// Check if the daily counter needs to be reset (new day)
+function shouldResetDailyCounter(lastResetAt: Date | null): boolean {
+  if (!lastResetAt) return true;
+  const now = new Date();
+  const lastReset = new Date(lastResetAt);
+  // Reset if the last reset was on a different day
+  return (
+    now.getFullYear() !== lastReset.getFullYear() ||
+    now.getMonth() !== lastReset.getMonth() ||
+    now.getDate() !== lastReset.getDate()
+  );
+}
+
 export async function recordArmUse(armType: ArmType, armId: string) {
   const existing = await prisma.armStats.findFirst({
     where: { armType, armId }
   });
+  const now = new Date();
+  
   if (existing) {
+    // Check if we need to reset the daily counter
+    const resetDaily = shouldResetDailyCounter(existing.lastResetAt);
     await prisma.armStats.update({
       where: { id: existing.id },
-      data: { pulls: existing.pulls + 1, lastUsedAt: new Date() }
+      data: {
+        pulls: existing.pulls + 1,
+        lastUsedAt: now,
+        usesToday: resetDaily ? 1 : (existing.usesToday ?? 0) + 1,
+        lastResetAt: resetDaily ? now : existing.lastResetAt
+      }
     });
     return;
   }
   await prisma.armStats.create({
-    data: { armType, armId, pulls: 1, lastUsedAt: new Date() }
+    data: { armType, armId, pulls: 1, lastUsedAt: now, usesToday: 1, lastResetAt: now }
   });
 }
+
 
 export async function updateArmStats(params: {
   armType: ArmType;
@@ -140,18 +158,34 @@ export async function updateArmStatsForPlan(params: {
   if (params.impressions < params.minViews) return;
   const plan = await prisma.postPlan.findUnique({
     where: { id: params.planId },
-    select: { recipeId: true, variantId: true, ctaId: true, container: true, snippetId: true, clipIds: true }
+    select: { recipeId: true, container: true, snippetId: true, clipIds: true }
   });
   if (!plan) return;
   const updates: Array<{ armType: ArmType; armId: string }> = [];
   if (plan.recipeId) updates.push({ armType: "RECIPE", armId: plan.recipeId });
-  if (plan.variantId) updates.push({ armType: "VARIANT", armId: plan.variantId });
-  if (plan.ctaId) updates.push({ armType: "CTA", armId: plan.ctaId });
   updates.push({ armType: "CONTAINER", armId: plan.container });
-  if (plan.snippetId) updates.push({ armType: "SNIPPET", armId: plan.snippetId });
+  if (plan.snippetId) {
+    const snippet = await prisma.snippet.findUnique({
+      where: { id: plan.snippetId },
+      select: { moment3to7: true, moment7to11: true }
+    });
+    const strategy = snippet?.moment3to7
+      ? "moment_3_7"
+      : snippet?.moment7to11
+      ? "moment_7_11"
+      : "any";
+    updates.push({ armType: "SNIPPET_STRATEGY", armId: strategy });
+  }
   const clipIds = Array.isArray(plan.clipIds) ? (plan.clipIds as string[]) : [];
-  for (const clipId of clipIds) {
-    updates.push({ armType: "CLIP", armId: clipId });
+  if (clipIds.length > 0) {
+    const clips = await prisma.clip.findMany({
+      where: { id: { in: clipIds } },
+      select: { category: true }
+    });
+    const uniqueCategories = new Set(clips.map((clip) => clip.category));
+    for (const category of uniqueCategories) {
+      updates.push({ armType: "CLIP_CATEGORY", armId: category });
+    }
   }
 
   for (const update of updates) {
@@ -175,7 +209,7 @@ export async function promoteRetireArms(params: {
   retirementMinPulls: number;
 }) {
   const stats = await prisma.armStats.findMany();
-  const armTypes: ArmType[] = ["RECIPE", "VARIANT", "CTA"];
+  const armTypes: ArmType[] = ["RECIPE"];
   const promoted: string[] = [];
   const retired: string[] = [];
 
@@ -208,20 +242,6 @@ export async function promoteRetireArms(params: {
         impressions >= params.promotionMinImpressions &&
         mean >= promoteThreshold
       ) {
-        if (armType === "VARIANT") {
-          const updated = await prisma.variant.updateMany({
-            where: { id: row.armId, status: "testing" },
-            data: { status: "active" }
-          });
-          if (updated.count > 0) promoted.push(row.armId);
-        }
-        if (armType === "CTA") {
-          const updated = await prisma.cta.updateMany({
-            where: { id: row.armId, status: "testing" },
-            data: { status: "active" }
-          });
-          if (updated.count > 0) promoted.push(row.armId);
-        }
         if (armType === "RECIPE") {
           const updated = await prisma.hookRecipe.updateMany({
             where: { id: row.armId, enabled: false },
@@ -237,20 +257,6 @@ export async function promoteRetireArms(params: {
         impressions >= params.promotionMinImpressions &&
         mean <= retireThreshold
       ) {
-        if (armType === "VARIANT") {
-          const updated = await prisma.variant.updateMany({
-            where: { id: row.armId, status: { not: "retired" } },
-            data: { status: "retired" }
-          });
-          if (updated.count > 0) retired.push(row.armId);
-        }
-        if (armType === "CTA") {
-          const updated = await prisma.cta.updateMany({
-            where: { id: row.armId, status: { not: "retired" } },
-            data: { status: "retired" }
-          });
-          if (updated.count > 0) retired.push(row.armId);
-        }
         if (armType === "RECIPE") {
           const updated = await prisma.hookRecipe.updateMany({
             where: { id: row.armId, enabled: true },

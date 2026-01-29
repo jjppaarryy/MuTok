@@ -6,13 +6,11 @@ import { useState } from "react";
 import {
   Activity,
   BarChart3,
-  BookOpen,
   Cpu,
   FileText,
   FolderOpen,
   Gauge,
   LayoutDashboard,
-  Lightbulb,
   ListChecks,
   PlugZap,
   TrendingUp
@@ -22,15 +20,14 @@ const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Connect TikTok", href: "/connect", icon: PlugZap },
   { label: "Asset Bank", href: "/assets", icon: FolderOpen },
-  { label: "Guardrails & Recipes", href: "/rules", icon: ListChecks },
-  { label: "Inspo Library", href: "/inspo", icon: Lightbulb },
+  { label: "Guardrails", href: "/rules", icon: ListChecks },
+  { label: "Recipes", href: "/recipes", icon: FileText },
   { label: "Optimisation Policy", href: "/viral", icon: Activity },
   { label: "Optimiser", href: "/optimizer", icon: TrendingUp },
   { label: "Queue", href: "/queue", icon: Gauge },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Run Logs", href: "/logs", icon: FileText },
-  { label: "System Status", href: "/status", icon: Cpu },
-  { label: "Brain", href: "/brain", icon: BookOpen }
+  { label: "System Status", href: "/status", icon: Cpu }
 ];
 
 export default function Sidebar() {

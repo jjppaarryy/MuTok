@@ -91,7 +91,7 @@ export const inspoImportSchema = z.object({
     purposeTags: z.array(z.string()).optional(),
     genreTags: z.array(z.string()).optional(),
     hashtags: z.array(z.string()).optional(),
-    stats: z.record(z.unknown()).optional(),
+    stats: z.record(z.string(), z.unknown()).optional(),
     createdTime: z.string().datetime().optional()
   }))
 });
@@ -122,7 +122,47 @@ export const snippetSchema = z.object({
 export const rulesSchema = z.object({
   target_queue_size: z.number().int().min(1).max(100).optional(),
   cadence_per_day: z.number().int().min(1).max(10).optional(),
-  post_time_windows: z.tuple([z.string(), z.string()]).optional(),
+  post_time_windows: z.array(z.string()).min(1).optional(),
+  voice_profile: z.string().optional(),
+  voice_banned_words: z.array(z.string()).optional(),
+  voice_examples_limit: z.number().int().min(0).max(200).optional(),
+  spam_guardrails: z.object({
+    pending_drafts_cap: z.number().int().min(1).max(10).optional(),
+    daily_draft_upload_cap: z.number().int().min(1).max(10).optional(),
+    min_gap_hours: z.number().min(1).max(24).optional(),
+    window_jitter_minutes: z.number().int().min(0).max(90).optional(),
+    recipe_cooldown_days: z.number().int().min(1).max(30).optional(),
+    beat1_exact_cooldown_days: z.number().int().min(1).max(30).optional(),
+    beat2_exact_cooldown_days: z.number().int().min(1).max(30).optional(),
+    caption_exact_cooldown_days: z.number().int().min(1).max(30).optional(),
+    beat1_prefix_words: z.number().int().min(1).max(6).optional(),
+    beat1_prefix_cooldown_days: z.number().int().min(1).max(30).optional(),
+    snippet_cooldown_hours: z.number().int().min(1).max(168).optional(),
+    track_cooldown_hours: z.number().int().min(1).max(168).optional(),
+    clip_cooldown_hours: z.number().int().min(1).max(168).optional(),
+    montage_template_cooldown_hours: z.number().int().min(1).max(168).optional(),
+    max_hook_family_per_day: z.number().int().min(1).max(10).optional(),
+    max_hook_family_per_week: z.number().int().min(1).max(20).optional(),
+    max_anti_algo_per_week: z.number().int().min(0).max(20).optional(),
+    max_comment_cta_per_day: z.number().int().min(0).max(10).optional(),
+    max_same_cta_intent_in_row: z.number().int().min(1).max(10).optional(),
+    max_snippet_style_per_day: z.number().int().min(1).max(10).optional(),
+    hashtag_count_min: z.number().int().min(0).max(10).optional(),
+    hashtag_count_max: z.number().int().min(1).max(20).optional(),
+    retire_score_threshold: z.number().min(0).max(1).optional(),
+    retire_min_posts: z.number().int().min(1).max(20).optional()
+  }).optional(),
+  recovery_mode: z.object({
+    enabled: z.boolean().optional(),
+    days: z.number().int().min(1).max(30).optional(),
+    views_drop_threshold: z.number().min(0).max(1).optional(),
+    view2s_drop_threshold: z.number().min(0).max(1).optional(),
+    spam_error_threshold: z.number().int().min(0).max(10).optional(),
+    cadence_per_day: z.number().int().min(1).max(5).optional(),
+    allow_montage: z.boolean().optional(),
+    allow_comment_cta: z.boolean().optional(),
+    hashtag_max: z.number().int().min(1).max(10).optional()
+  }).optional(),
   montage: z.object({
     clip_duration_range: z.tuple([z.number(), z.number()]).optional()
   }).optional(),
@@ -149,7 +189,7 @@ export async function validateBody<T>(
     const result = schema.safeParse(body);
     
     if (!result.success) {
-      const errors = result.error.errors.map(e => ({
+      const errors = result.error.issues.map((e) => ({
         path: e.path.join("."),
         message: e.message
       }));
@@ -186,7 +226,7 @@ export function validateParams<T>(
   const result = schema.safeParse(params);
   
   if (!result.success) {
-    const errors = result.error.errors.map(e => ({
+    const errors = result.error.issues.map((e) => ({
       path: e.path.join("."),
       message: e.message
     }));

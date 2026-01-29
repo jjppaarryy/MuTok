@@ -8,14 +8,8 @@ type OptimiserPolicy = {
   max_locked_share: number;
   prior_mean: number;
   prior_weight: number;
-  inspo_seed_enabled: boolean;
-  inspo_seed_weight: number;
-  inspo_seed_max_pulls: number;
   autopilot_enabled: boolean;
   autopilot_interval_hours: number;
-  autopilot_inspo_enabled: boolean;
-  autopilot_inspo_days: number;
-  autopilot_inspo_only_favorites: boolean;
   plateau_days: number;
   test_dimensions: {
     recipe: boolean;
@@ -34,39 +28,9 @@ type OptimiserPolicy = {
   };
 };
 
-const cardStyle: React.CSSProperties = {
-  padding: 48,
-  borderRadius: 24,
-  backgroundColor: "white",
-  border: "1px solid #e2e8f0",
-  boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-  display: "flex",
-  flexDirection: "column",
-  gap: 32
-};
-
-const inputStyle: React.CSSProperties = {
-  marginTop: 12,
-  width: "100%",
-  borderRadius: 16,
-  border: "1px solid #e2e8f0",
-  backgroundColor: "#f8fafc",
-  padding: "16px 20px",
-  fontSize: 16,
-  fontWeight: 500,
-  color: "#0f172a",
-  outline: "none"
-};
-
-const labelStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  fontSize: 16,
-  fontWeight: 600,
-  color: "#334155",
-  cursor: "pointer"
-};
+const cardStyle: React.CSSProperties = { padding: 48, borderRadius: 24, backgroundColor: "white", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", gap: 32 };
+const inputStyle: React.CSSProperties = { marginTop: 12, width: "100%", borderRadius: 16, border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", padding: "16px 20px", fontSize: 16, fontWeight: 500, color: "#0f172a", outline: "none" };
+const labelStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 16, fontSize: 16, fontWeight: 600, color: "#334155", cursor: "pointer" };
 
 type OptimiserPolicyCardProps = {
   policy: OptimiserPolicy;
@@ -201,40 +165,7 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
           />
         </label>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, borderTop: "1px solid #f1f5f9", paddingTop: 24 }}>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Enable inspo seeds
-          <input
-            type="checkbox"
-            checked={policy.inspo_seed_enabled}
-            onChange={(event) => onUpdate({ inspo_seed_enabled: event.target.checked })}
-            style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#fe2c55" }}
-          />
-        </label>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Seed weight
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={policy.inspo_seed_weight}
-            onChange={(event) => onUpdate({ inspo_seed_weight: Number(event.target.value) })}
-            style={inputStyle}
-          />
-        </label>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Seed max pulls
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={policy.inspo_seed_max_pulls}
-            onChange={(event) => onUpdate({ inspo_seed_max_pulls: Number(event.target.value) })}
-            style={inputStyle}
-          />
-        </label>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, borderTop: "1px solid #f1f5f9", paddingTop: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, borderTop: "1px solid #f1f5f9", paddingTop: 24 }}>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Autopilot enabled
           <input
@@ -255,39 +186,6 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
               onUpdate({ autopilot_interval_hours: Number(event.target.value) })
             }
             style={inputStyle}
-          />
-        </label>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Auto-seed inspo
-          <input
-            type="checkbox"
-            checked={policy.autopilot_inspo_enabled}
-            onChange={(event) => onUpdate({ autopilot_inspo_enabled: event.target.checked })}
-            style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#0f172a" }}
-          />
-        </label>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Auto-seed every (days)
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={policy.autopilot_inspo_days}
-            onChange={(event) =>
-              onUpdate({ autopilot_inspo_days: Number(event.target.value) })
-            }
-            style={inputStyle}
-          />
-        </label>
-        <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
-          Auto-seed favorites only
-          <input
-            type="checkbox"
-            checked={policy.autopilot_inspo_only_favorites}
-            onChange={(event) =>
-              onUpdate({ autopilot_inspo_only_favorites: event.target.checked })
-            }
-            style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#0f172a" }}
           />
         </label>
       </div>

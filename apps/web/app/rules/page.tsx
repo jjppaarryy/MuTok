@@ -5,166 +5,10 @@ import ActionButton from "../../components/ActionButton";
 import InlineTip from "../../components/InlineTip";
 import PageHeader from "../../components/PageHeader";
 import RulesForm from "../../components/rules/RulesForm";
-import HookRecipesEditor from "../../components/rules/HookRecipesEditor";
-
-type RulesSettings = {
-  cadence_per_day: number;
-  target_queue_size: number;
-  allowed_containers: string[];
-  montage: {
-    clip_count: number;
-    clip_duration_range: [number, number];
-  };
-  text_overlay: {
-    max_lines: number;
-  };
-  guardrails: {
-    max_lines: number;
-    banned_words: string[];
-    banned_phrases: string[];
-    allowed_tones: string[];
-    max_novelty: number;
-    allow_sync_critical: boolean;
-    allow_hands_keys_literal: boolean;
-  };
-  explore_ratio: number;
-  min_compatibility_score: number;
-  snippet_duration_range: [number, number];
-  post_time_windows: [string, string];
-  optimiser_policy: {
-    exploration_budget: number;
-    media_exploration_budget: number;
-    min_views_before_counting: number;
-    min_pulls_before_promote: number;
-    min_pulls_before_retire: number;
-    media_min_pulls_before_exploit: number;
-    max_locked_share: number;
-    prior_mean: number;
-    prior_weight: number;
-    inspo_seed_enabled: boolean;
-    inspo_seed_weight: number;
-    inspo_seed_max_pulls: number;
-    autopilot_enabled: boolean;
-    autopilot_interval_hours: number;
-    autopilot_inspo_enabled: boolean;
-    autopilot_inspo_days: number;
-    autopilot_inspo_only_favorites: boolean;
-    plateau_days: number;
-    test_dimensions: {
-      recipe: boolean;
-      variant: boolean;
-      cta: boolean;
-      container: boolean;
-      beat_timing: boolean;
-      timestamp_lure: boolean;
-    };
-    promotion: {
-      min_impressions: number;
-      uplift: number;
-    };
-    retirement: {
-      max_underperform: number;
-    };
-  };
-  caption_marker_enabled: boolean;
-  caption_marker_prefix: string;
-  metrics_match_window_minutes: number;
-  caption_topic_keywords: string[];
-  caption_hashtags: string[];
-};
-
-type HookRecipe = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  locked: boolean;
-  beat1Templates: string[];
-  beat2Templates: string[];
-  ctaType: string;
-  allowedSnippetTypes: string[];
-  disallowedContainers: string[];
-  variants?: Array<{
-    id: string;
-    beat1: string;
-    beat2: string;
-    locked: boolean;
-    status: string;
-  }>;
-};
-
-const defaultRules: RulesSettings = {
-  cadence_per_day: 2,
-  target_queue_size: 3,
-  allowed_containers: ["static_daw", "montage"],
-  montage: {
-    clip_count: 6,
-    clip_duration_range: [0.4, 0.9]
-  },
-  text_overlay: {
-    max_lines: 2
-  },
-  guardrails: {
-    max_lines: 2,
-    banned_words: ["hope", "please", "let me know", "new track"],
-    banned_phrases: ["hope you like", "let me know", "new track"],
-    allowed_tones: ["direct", "confident", "curious"],
-    max_novelty: 0.3,
-    allow_sync_critical: false,
-    allow_hands_keys_literal: false
-  },
-  explore_ratio: 0.3,
-  min_compatibility_score: 0.6,
-  snippet_duration_range: [7, 12],
-  post_time_windows: ["09:00", "18:00"],
-  optimiser_policy: {
-    exploration_budget: 0.3,
-    media_exploration_budget: 0.5,
-    min_views_before_counting: 200,
-    min_pulls_before_promote: 3,
-    min_pulls_before_retire: 3,
-    media_min_pulls_before_exploit: 6,
-    max_locked_share: 0.7,
-    prior_mean: 1,
-    prior_weight: 2,
-    inspo_seed_enabled: true,
-    inspo_seed_weight: 2,
-    inspo_seed_max_pulls: 5,
-    autopilot_enabled: false,
-    autopilot_interval_hours: 4,
-    autopilot_inspo_enabled: false,
-    autopilot_inspo_days: 7,
-    autopilot_inspo_only_favorites: true,
-    plateau_days: 7,
-    test_dimensions: {
-      recipe: true,
-      variant: true,
-      cta: true,
-      container: true,
-      beat_timing: true,
-      timestamp_lure: true
-    },
-    promotion: {
-      min_impressions: 2000,
-      uplift: 0.15
-    },
-    retirement: {
-      max_underperform: 3
-    }
-  },
-  caption_marker_enabled: true,
-  caption_marker_prefix: "#mbp",
-  metrics_match_window_minutes: 180,
-  caption_topic_keywords: [
-    "unreleased melodic techno ID",
-    "melodic house drop",
-    "progressive techno hook"
-  ],
-  caption_hashtags: ["#melodictechno", "#producer", "#daw"]
-};
+import { defaultRules, type RulesSettings } from "../../lib/rulesConfig";
 
 export default function RulesPage() {
   const [rules, setRules] = useState<RulesSettings>(defaultRules);
-  const [recipes, setRecipes] = useState<HookRecipe[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [schedulerRunning, setSchedulerRunning] = useState<boolean>(false);
 
@@ -172,10 +16,6 @@ export default function RulesPage() {
     const rulesRes = await fetch("/api/settings");
     const rulesJson = (await rulesRes.json()) as { rules: RulesSettings };
     setRules({ ...defaultRules, ...rulesJson.rules });
-
-    const recipeRes = await fetch("/api/hook-recipes");
-    const recipeJson = (await recipeRes.json()) as { recipes: HookRecipe[] };
-    setRecipes(recipeJson.recipes ?? []);
 
     const schedulerRes = await fetch("/api/scheduler/status");
     const schedulerJson = (await schedulerRes.json()) as { running: boolean };
@@ -198,16 +38,6 @@ export default function RulesPage() {
       body: JSON.stringify(rules)
     });
     setMessage("Rules saved successfully.");
-  };
-
-  const saveRecipes = async () => {
-    setMessage(null);
-    await fetch("/api/hook-recipes", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipes })
-    });
-    setMessage("Hook recipes saved.");
   };
 
   const applyPreset = (preset: "week1" | "scale") => {
@@ -246,8 +76,8 @@ export default function RulesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
       <PageHeader
-        title="Guardrails & Recipes"
-        description="Define what is allowed and the starting hook library."
+        title="Guardrails"
+        description="Define what is allowed and the scheduling rules."
         tip="Step 3: set guardrails before filling the queue."
         actions={
           <div style={{ display: 'flex', gap: 16 }}>
@@ -255,12 +85,6 @@ export default function RulesPage() {
               label="Save settings"
               onClick={saveRules}
               title="Save your rules and schedule."
-            />
-            <ActionButton
-              label="Save recipes"
-              variant="secondary"
-              onClick={saveRecipes}
-              title="Save the hook templates the AI can use."
             />
             <ActionButton
               label={schedulerRunning ? "Stop scheduler" : "Start scheduler"}
@@ -275,6 +99,9 @@ export default function RulesPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#64748b" }}>
         Pick a preset, tweak the rules, then save.
         <InlineTip text="If you want manual control, keep the scheduler off." />
+      </div>
+      <div style={{ fontSize: 14, color: "#64748b" }}>
+        Manage fixed captions on the Recipes page.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -301,7 +128,6 @@ export default function RulesPage() {
 
       <div style={{ display: 'grid', gap: 32, gridTemplateColumns: '1fr' }}>
         <RulesForm rules={rules} onChange={updateRule} />
-        <HookRecipesEditor recipes={recipes} onChange={setRecipes} />
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ export async function PUT(request: Request) {
       locked: boolean;
       beat1Templates: string[];
       beat2Templates: string[];
+      captionTemplate?: string | null;
       ctaType: string;
       allowedSnippetTypes: string[];
       disallowedContainers: string[];
@@ -38,6 +39,7 @@ export async function PUT(request: Request) {
         locked: recipe.locked,
         beat1Templates: recipe.beat1Templates,
         beat2Templates: recipe.beat2Templates,
+        captionTemplate: recipe.captionTemplate ?? null,
         ctaType: recipe.ctaType,
         allowedSnippetTypes: recipe.allowedSnippetTypes,
         disallowedContainers: recipe.disallowedContainers

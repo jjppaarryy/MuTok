@@ -13,11 +13,17 @@ export async function GET(request: NextRequest) {
     });
 
     const clipIds = plans.flatMap((plan) => (plan.clipIds as string[]));
+    const recipeIds = plans.map((plan) => plan.recipeId).filter(Boolean) as string[];
     const clips = await prisma.clip.findMany({
       where: { id: { in: clipIds } }
     });
+    const recipes = await prisma.hookRecipe.findMany({
+      where: { id: { in: recipeIds } },
+      select: { id: true, name: true }
+    });
 
     const clipMap = new Map(clips.map((clip) => [clip.id, clip]));
+    const recipeMap = new Map(recipes.map((recipe) => [recipe.id, recipe.name]));
 
     const data = plans.map((plan) => {
       const clipRefs = (plan.clipIds as string[])
@@ -26,6 +32,7 @@ export async function GET(request: NextRequest) {
       return {
         ...plan,
         clips: clipRefs,
+        recipeName: plan.recipeId ? recipeMap.get(plan.recipeId) ?? null : null,
         hasSensitiveClip: (plan.clipIds as string[]).some((id) => {
           const clip = clipMap.get(id);
           return clip?.sync === "sensitive";

@@ -59,6 +59,7 @@ const valueStyle = (ok: boolean): React.CSSProperties => ({
 export default function StatusPage() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [schedulerMessage, setSchedulerMessage] = useState<string | null>(null);
 
   const loadStatus = async () => {
     const response = await fetch("/api/system/check");
@@ -81,6 +82,30 @@ export default function StatusPage() {
       setMessage("Pipeline test initiated.");
     } else {
       setMessage("Pipeline test failed.");
+    }
+  };
+
+  const startScheduler = async () => {
+    setSchedulerMessage(null);
+    const response = await fetch("/api/scheduler/start", { method: "POST" });
+    if (response.ok) {
+      setSchedulerMessage("Scheduler started.");
+      await loadStatus();
+    } else {
+      const data = (await response.json()) as { error?: string };
+      setSchedulerMessage(data.error ?? "Scheduler start failed.");
+    }
+  };
+
+  const stopScheduler = async () => {
+    setSchedulerMessage(null);
+    const response = await fetch("/api/scheduler/stop", { method: "POST" });
+    if (response.ok) {
+      setSchedulerMessage("Scheduler stopped.");
+      await loadStatus();
+    } else {
+      const data = (await response.json()) as { error?: string };
+      setSchedulerMessage(data.error ?? "Scheduler stop failed.");
     }
   };
 
@@ -114,6 +139,11 @@ export default function StatusPage() {
       {message ? (
         <div style={{ padding: 20, borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#f0fdf4', fontSize: 16, color: '#059669', fontWeight: 600 }}>
           {message}
+        </div>
+      ) : null}
+      {schedulerMessage ? (
+        <div style={{ padding: 16, borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#eef2ff', fontSize: 14, color: '#4338ca', fontWeight: 600 }}>
+          {schedulerMessage}
         </div>
       ) : null}
 
@@ -157,6 +187,10 @@ export default function StatusPage() {
               <div style={rowStyle}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#475569' }}>Scheduler</span>
                 <span style={valueStyle(status.scheduler.running)}>{status.scheduler.running ? "Running" : "Stopped"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                <ActionButton label="Start scheduler" onClick={startScheduler} />
+                <ActionButton label="Stop scheduler" variant="outline" onClick={stopScheduler} />
               </div>
             </div>
           </div>

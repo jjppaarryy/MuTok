@@ -11,10 +11,20 @@ type Health = {
   approvedSnippets: number;
   draftCount: number;
   pendingCount?: number;
+  dailyUploads?: number;
   authConnected?: boolean;
   authExpiresAt?: string | null;
   scheduler?: { running: boolean; hasTask: boolean };
   uploadCooldownUntil?: string | Date | null;
+  recovery?: { active: boolean; viewsDrop: number; view2sDrop: number; spamErrors: number };
+};
+
+type Coverage = {
+  activeRecipes: number;
+  requiredRecipes: number;
+  shortfall: number;
+  cadencePerDay: number;
+  cooldownDays: number;
 };
 
 export default function DashboardPage() {
@@ -63,10 +73,13 @@ export default function DashboardPage() {
     approvedSnippets: 0,
     draftCount: 0,
     pendingCount: 0,
+    dailyUploads: 0,
     authConnected: false,
     authExpiresAt: null,
     scheduler: { running: false, hasTask: false }
   });
+  const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [retireCount, setRetireCount] = useState<number>(0);
   const [nextRun, setNextRun] = useState<string>("—");
 
   const loadHealth = async () => {
@@ -77,23 +90,60 @@ export default function DashboardPage() {
 
   const loadNextRun = async () => {
     const response = await fetch("/api/settings");
-    const data = (await response.json()) as { rules: { post_time_windows: [string, string] } };
-    const [first, second] = data.rules.post_time_windows;
+    const data = (await response.json()) as {
+      rules: { post_time_windows: string[]; spam_guardrails?: { window_jitter_minutes?: number } };
+    };
+    const windows = data.rules.post_time_windows ?? [];
+    const jitter = data.rules.spam_guardrails?.window_jitter_minutes ?? 0;
     const now = new Date();
-    const [h1, m1] = first.split(":").map(Number);
-    const [h2, m2] = second.split(":").map(Number);
-    const firstTime = new Date(now);
-    firstTime.setHours(h1, m1, 0, 0);
-    const secondTime = new Date(now);
-    secondTime.setHours(h2, m2, 0, 0);
+    const candidates = windows
+      .map((time) => {
+        const [start] = time.split("-");
+        const [hour, minute] = start.split(":").map(Number);
+        const next = new Date(now);
+        next.setHours(hour, minute, 0, 0);
+        if (jitter > 0) {
+          next.setMinutes(next.getMinutes() + Math.min(jitter, 30));
+        }
+        return next;
+      })
+      .sort((a, b) => a.getTime() - b.getTime());
+    const nextSameDay = candidates.find((candidate) => candidate > now);
     const next =
-      now < firstTime ? firstTime : now < secondTime ? secondTime : new Date(firstTime.getTime() + 24 * 60 * 60 * 1000);
+      nextSameDay ?? (candidates[0] ? new Date(candidates[0].getTime() + 24 * 60 * 60 * 1000) : now);
     setNextRun(next.toLocaleString());
+  };
+
+  const loadCoverage = async () => {
+    try {
+      const response = await fetch("/api/analytics/summary");
+      if (!response.ok) {
+        setCoverage(null);
+        setRetireCount(0);
+        return;
+      }
+      const text = await response.text();
+      if (!text) {
+        setCoverage(null);
+        setRetireCount(0);
+        return;
+      }
+      const data = JSON.parse(text) as {
+        coverage?: Coverage;
+        notifications?: { retireCandidates?: Array<{ recipeId: string }> };
+      };
+      setCoverage(data.coverage ?? null);
+      setRetireCount(data.notifications?.retireCandidates?.length ?? 0);
+    } catch {
+      setCoverage(null);
+      setRetireCount(0);
+    }
   };
 
   useEffect(() => {
     void loadHealth();
     void loadNextRun();
+    void loadCoverage();
   }, []);
 
   const topUpDrafts = async () => {
@@ -163,6 +213,11 @@ export default function DashboardPage() {
             title="Pending share cap"
             value={`${health.pendingCount ?? 0}/5`}
             hint="24h window"
+          />
+          <StatCard
+            title="Daily uploads"
+            value={`${health.dailyUploads ?? 0}/3`}
+            hint="Daily cap"
           />
           <StatCard title="Clips available" value={String(health.clipCount)} />
           <StatCard
@@ -245,6 +300,21 @@ export default function DashboardPage() {
               No critical alerts right now.
             </div>
           )}
+          {coverage && coverage.shortfall > 0 ? (
+            <div style={styles.alertCard} className="card text-warning">
+              You need {coverage.shortfall} more active recipes for {coverage.cadencePerDay}/day.
+            </div>
+          ) : null}
+          {retireCount > 0 ? (
+            <div style={styles.alertCard} className="card text-warning">
+              {retireCount} recipes are ready to retire.
+            </div>
+          ) : null}
+          {health.recovery?.active ? (
+            <div style={styles.alertCard} className="card text-warning">
+              Recovery mode active: performance drop detected. Posting reduced.
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

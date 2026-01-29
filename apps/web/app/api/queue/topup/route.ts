@@ -39,6 +39,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (draftCount >= rules.spam_guardrails.pending_drafts_cap) {
+      return NextResponse.json({
+        warning: "Pending drafts cap reached. Uploads paused.",
+        draftCount,
+        cap: rules.spam_guardrails.pending_drafts_cap
+      }, { status: 429 });
+    }
+
     if (draftCount >= rules.target_queue_size) {
       return NextResponse.json({ 
         status: "Queue already at target",

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import ActionButton from "../../components/ActionButton";
 import InlineTip from "../../components/InlineTip";
 import StatCard from "../../components/StatCard";
+import LeaderboardCard from "../../components/analytics/LeaderboardCard";
+import RecipeSuggestions from "../../components/analytics/RecipeSuggestions";
 
 type MetricsSummary = {
   totals: {
@@ -12,9 +14,18 @@ type MetricsSummary = {
     comments: number;
     shares: number;
   };
-  hookLeaderboard: { hookFamily: string; score: number }[];
-  containerLeaderboard: { container: string; score: number }[];
-  recommendations: string[];
+  recipeLeaderboard: { recipe: string; score: number; count: number }[];
+  containerLeaderboard: { container: string; score: number; count: number }[];
+  snippetLeaderboard: { snippetStrategy: string; score: number; count: number }[];
+  clipCategoryLeaderboard: { clipCategory: string; score: number; count: number }[];
+  pairingLeaderboard: { pairing: string; score: number; count: number }[];
+  coverage: {
+    activeRecipes: number;
+    requiredRecipes: number;
+    shortfall: number;
+    cadencePerDay: number;
+    cooldownDays: number;
+  };
 };
 
 type PostPlan = {
@@ -23,29 +34,8 @@ type PostPlan = {
   status: string;
 };
 
-const cardStyle: React.CSSProperties = {
-  padding: 48,
-  borderRadius: 24,
-  backgroundColor: 'white',
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24
-};
-
-const inputStyle: React.CSSProperties = {
-  marginTop: 12,
-  width: '100%',
-  borderRadius: 16,
-  border: '1px solid #e2e8f0',
-  backgroundColor: '#f8fafc',
-  padding: '16px 20px',
-  fontSize: 16,
-  fontWeight: 500,
-  color: '#0f172a',
-  outline: 'none'
-};
+const cardStyle: React.CSSProperties = { padding: 48, borderRadius: 24, backgroundColor: 'white', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', gap: 24 };
+const inputStyle: React.CSSProperties = { marginTop: 12, width: '100%', borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', padding: '16px 20px', fontSize: 16, fontWeight: 500, color: '#0f172a', outline: 'none' };
 
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
@@ -61,14 +51,21 @@ export default function AnalyticsPage() {
   const loadSummary = async () => {
     try {
       const response = await fetch("/api/analytics/summary");
-      if (!response.ok) throw new Error("Failed to load summary");
-      const data = (await response.json()) as MetricsSummary;
+      if (!response.ok) {
+        setSummary(null);
+        return;
+      }
+      const text = await response.text();
+      if (!text) {
+        setSummary(null);
+        return;
+      }
+      const data = JSON.parse(text) as MetricsSummary;
       setSummary(data);
     } catch (err) {
       console.error("Failed to load summary:", err);
     }
   };
-
   const loadPlans = async () => {
     try {
       const response = await fetch("/api/queue");
@@ -81,14 +78,9 @@ export default function AnalyticsPage() {
   };
 
   useEffect(() => {
-    const loadAll = async () => {
-      setLoading(true);
-      await Promise.all([loadSummary(), loadPlans()]);
-      setLoading(false);
-    };
+    const loadAll = async () => { setLoading(true); await Promise.all([loadSummary(), loadPlans()]); setLoading(false); };
     void loadAll();
   }, []);
-
   const refreshMetrics = async () => {
     setMessage(null);
     setError(null);
@@ -107,7 +99,6 @@ export default function AnalyticsPage() {
       setRefreshing(false);
     }
   };
-
   const markPosted = async () => {
     if (!selectedPlan) {
       setError("Please select a post plan");
@@ -135,7 +126,6 @@ export default function AnalyticsPage() {
       setError(err instanceof Error ? err.message : "Failed to mark as posted");
     }
   };
-
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -149,14 +139,13 @@ export default function AnalyticsPage() {
       <header>
         <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, marginBottom: 12, color: '#0f172a' }}>Analytics & Learning</h1>
         <p style={{ fontSize: 17, color: '#64748b' }}>
-          Rate-limited metrics fetch with hook family learning.
+          Weekly learning and deterministic recipe performance.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, fontSize: 14, color: "#64748b" }}>
           Refresh after you post on TikTok.
           <InlineTip text="If a post doesn't match, use manual mapping below." />
         </div>
       </header>
-
       <section style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         <ActionButton
           label={refreshing ? "Refreshing..." : "Refresh metrics"}
@@ -171,7 +160,6 @@ export default function AnalyticsPage() {
           title="Link a TikTok video to a plan."
         />
       </section>
-
       {error && (
         <div style={{ padding: 20, borderRadius: 16, border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: 14, color: '#dc2626' }}>
           {error}
@@ -196,39 +184,71 @@ export default function AnalyticsPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
         <div style={cardStyle}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Hook Family Leaderboard</h2>
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 20, fontSize: 16, color: '#475569' }}>
-            {summary?.hookLeaderboard?.length ? (
-              summary.hookLeaderboard.slice(0, 5).map((row) => (
-                <div key={row.hookFamily} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
-                  <span style={{ fontWeight: 600 }}>{row.hookFamily}</span>
-                  <span style={{ fontWeight: 800, color: '#fe2c55', backgroundColor: '#fff1f2', padding: '4px 12px', borderRadius: 20, fontSize: 14 }}>Viral {row.score.toFixed(2)}</span>
-                </div>
-              ))
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Coverage</h2>
+          <div style={{ fontSize: 16, color: '#475569', lineHeight: 1.6 }}>
+            {summary ? (
+              <>
+                <div>Active recipes: {summary.coverage.activeRecipes}</div>
+                <div>Required recipes: {summary.coverage.requiredRecipes}</div>
+                <div>Shortfall: {summary.coverage.shortfall}</div>
+                <div>Cadence: {summary.coverage.cadencePerDay}/day</div>
+                <div>Cooldown: {summary.coverage.cooldownDays} days</div>
+              </>
             ) : (
-              <div style={{ color: '#94a3b8' }}>
-                No data yet. Run metrics fetch after posting.
-              </div>
+              <div>No coverage data yet.</div>
             )}
           </div>
         </div>
-        
-        <div style={cardStyle}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Container Performance</h2>
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 20, fontSize: 16, color: '#475569' }}>
-            {summary?.containerLeaderboard?.length ? (
-              summary.containerLeaderboard.slice(0, 5).map((row) => (
-                <div key={row.container} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
-                  <span style={{ fontWeight: 600 }}>{row.container}</span>
-                  <span style={{ fontWeight: 800, color: '#0f172a', backgroundColor: '#f1f5f9', padding: '4px 12px', borderRadius: 20, fontSize: 14 }}>Viral {row.score.toFixed(2)}</span>
-                </div>
-              ))
-            ) : (
-              <div style={{ color: '#94a3b8' }}>No data yet.</div>
-            )}
-          </div>
-        </div>
+
+        <LeaderboardCard
+          title="Recipe Leaderboard"
+          rows={(summary?.recipeLeaderboard ?? []).map((row) => ({
+            label: row.recipe,
+            score: row.score,
+            count: row.count
+          }))}
+        />
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
+        <LeaderboardCard
+          title="Container Performance"
+          rows={(summary?.containerLeaderboard ?? []).map((row) => ({
+            label: row.container,
+            score: row.score,
+            count: row.count
+          }))}
+        />
+        <LeaderboardCard
+          title="Snippet Strategy"
+          rows={(summary?.snippetLeaderboard ?? []).map((row) => ({
+            label: row.snippetStrategy,
+            score: row.score,
+            count: row.count
+          }))}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
+        <LeaderboardCard
+          title="Clip Category"
+          rows={(summary?.clipCategoryLeaderboard ?? []).map((row) => ({
+            label: row.clipCategory,
+            score: row.score,
+            count: row.count
+          }))}
+        />
+        <LeaderboardCard
+          title="Recipe + Container"
+          rows={(summary?.pairingLeaderboard ?? []).map((row) => ({
+            label: row.pairing,
+            score: row.score,
+            count: row.count
+          }))}
+        />
+      </div>
+
+      <RecipeSuggestions />
 
       {showManualMapping && (
         <section style={cardStyle}>
@@ -273,14 +293,7 @@ export default function AnalyticsPage() {
         </section>
       )}
 
-      {summary?.recommendations?.length ? (
-        <section style={{ ...cardStyle, backgroundColor: '#fef2f2', border: '1px solid #fee2e2' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#991b1b' }}>Recommendations</h2>
-          <div style={{ marginTop: 16, fontSize: 18, color: '#b91c1c', fontWeight: 600 }}>
-            Film more: {summary.recommendations.join(", ")}
-          </div>
-        </section>
-      ) : null}
+      
     </div>
   );
 }

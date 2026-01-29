@@ -21,15 +21,34 @@ export async function GET(request: NextRequest) {
 
     const verifier = generateCodeVerifier();
     const challenge = generateCodeChallenge(verifier);
+    const stateId = `mutok_${Date.now()}`;
 
-    // Store verifier in cookie for callback
+    // Clear any old verifier and store new one
     const cookieStore = await cookies();
+    cookieStore.delete("tiktok_code_verifier");
+    cookieStore.delete("tiktok_state");
+    
     cookieStore.set("tiktok_code_verifier", verifier, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false, // localhost doesn't use HTTPS
       sameSite: "lax",
-      maxAge: 60 * 10 // 10 minutes
+      maxAge: 60 * 10, // 10 minutes
+      path: "/"
     });
+    
+    cookieStore.set("tiktok_state", stateId, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      maxAge: 60 * 10,
+      path: "/"
+    });
+
+    console.log("[connect] Full verifier:", verifier);
+    console.log("[connect] Verifier length:", verifier.length);
+    console.log("[connect] Full challenge:", challenge);
+    console.log("[connect] Challenge length:", challenge.length);
+    console.log("[connect] State:", stateId);
 
     const url = new URL("https://www.tiktok.com/v2/auth/authorize/");
     url.searchParams.set("client_key", clientKey);
@@ -37,13 +56,16 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("response_type", "code");
     url.searchParams.set(
       "scope",
-      "user.info.basic,video.upload,video.publish"
+      "user.info.basic,video.publish"
     );
-    url.searchParams.set("state", "mutok");
+    url.searchParams.set("state", stateId);
     url.searchParams.set("code_challenge", challenge);
     url.searchParams.set("code_challenge_method", "S256");
 
-    return NextResponse.json({ url: url.toString() });
+    const finalUrl = url.toString();
+    console.log("[connect] Final auth URL challenge param:", url.searchParams.get("code_challenge"));
+    
+    return NextResponse.json({ url: finalUrl });
   } catch (error) {
     console.error("Failed to generate TikTok auth URL:", error);
     return NextResponse.json(

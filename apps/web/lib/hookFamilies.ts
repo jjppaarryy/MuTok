@@ -83,10 +83,10 @@ const defaultFamilies = [
     templates: [
       {
         beat1: "If you get it, you get it.",
-        beat2: "Name this vibe.",
+        beat2: "If you're here, say hi.",
         cta: "COMMENT_VIBE",
         retention: ["Identity gate", "Open loop"],
-        interaction: "Name the vibe"
+        interaction: "Say hi"
       }
     ]
   },
@@ -115,14 +115,38 @@ const defaultFamilies = [
     ]
   },
   {
-    name: "Name it",
+    name: "Anti-algorithm",
     templates: [
       {
-        beat1: "What do we call this?",
-        beat2: "Best name wins.",
+        beat1: "Not trending. Still here.",
+        beat2: "If you're here, say hi.",
         cta: "COMMENT_VIBE",
-        retention: ["Open loop", "Interaction"],
-        interaction: "Name the track"
+        retention: ["Anti-algorithm", "Identity gate"],
+        interaction: "Say hi"
+      }
+    ]
+  },
+  {
+    name: "Small numbers",
+    templates: [
+      {
+        beat1: "TikTok shows this to 400.",
+        beat2: "If you're here, say hi.",
+        cta: "COMMENT_VIBE",
+        retention: ["Small numbers", "Identity gate"],
+        interaction: "Say hi"
+      }
+    ]
+  },
+  {
+    name: "Doomscroll interrupt",
+    templates: [
+      {
+        beat1: "Sorry to interrupt your doomscrolling.",
+        beat2: "Give me 2.5 seconds.",
+        cta: "KEEP_SKIP",
+        retention: ["Pattern interrupt", "Micro-commitment"],
+        interaction: "Give me 2.5 seconds"
       }
     ]
   }

@@ -92,15 +92,8 @@ export default function BrainPage() {
     void loadSystemPrompt();
   }, []);
 
-  const runNow = async () => {
-    setMessage(null);
-    const response = await fetch("/api/brain/run", { method: "POST" });
-    if (!response.ok) {
-      setMessage("Brain run failed.");
-      return;
-    }
-    setMessage("Brain run complete.");
-    await loadLast();
+  const runNow = () => {
+    setMessage("Brain runs are disabled. Recipes are fixed and deterministic.");
   };
 
   const savePrompt = async () => {
@@ -116,14 +109,14 @@ export default function BrainPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
       <PageHeader
         title="MuTok Brain"
-        description="This is the AI planner. You can also run manually."
-        tip="Optional: use this when you want AI plans."
+        description="Brain runs are disabled. Recipes are fixed and deterministic."
+        tip="Use analysis tools to review winners and propose new recipes."
         actions={
           <div style={{ display: 'flex', gap: 16 }}>
             <ActionButton
-              label="Run brain now"
+              label="Brain disabled"
               onClick={runNow}
-              title="Ask the AI to make new plans."
+              title="Brain runs are disabled."
             />
             <ActionButton
               label="Save system prompt"

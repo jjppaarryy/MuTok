@@ -4,60 +4,38 @@ import { useEffect, useState } from "react";
 import ActionButton from "../../components/ActionButton";
 import InlineTip from "../../components/InlineTip";
 import PageHeader from "../../components/PageHeader";
+import QueuePlanCard, { QueuePlan } from "../../components/queue/QueuePlanCard";
 
-type Clip = {
-  id: string;
-  filePath: string;
-  category: string;
-};
-
-type PostPlan = {
-  id: string;
-  container: string;
-  onscreenText: string;
-  caption: string;
-  status: string;
-  compatibilityScore: number;
-  scheduledFor?: string;
-  renderPath?: string | null;
-  renderHash?: string | null;
-  clips: Clip[];
-};
-
-const cardStyle: React.CSSProperties = {
-  padding: 40,
-  borderRadius: 24,
-  backgroundColor: 'white',
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24
-};
-
-const badgeStyle = (status: string): React.CSSProperties => ({
-  padding: '8px 16px',
-  borderRadius: 50,
-  fontSize: 13,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  backgroundColor: status === 'RENDERED' ? '#ecfdf5' : '#f1f5f9',
-  color: status === 'RENDERED' ? '#065f46' : '#475569',
-  border: status === 'RENDERED' ? '1px solid #a7f3d0' : '1px solid #e2e8f0'
-});
+const emptyCardStyle: React.CSSProperties = { padding: 40, borderRadius: 24, backgroundColor: "white", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", gap: 24, textAlign: "center", color: "#64748b" };
 
 export default function QueuePage() {
-  const [plans, setPlans] = useState<PostPlan[]>([]);
-  const [draftCount, setDraftCount] = useState<number>(0);
-  const [pendingCount, setPendingCount] = useState<number>(0);
-  const [message, setMessage] = useState<string | null>(null);
-  const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [batchLoading, setBatchLoading] = useState<boolean>(false);
+  const [plans, setPlans] = useState<QueuePlan[]>([]);
+  const [draftCount, setDraftCount] = useState<number>(0); const [pendingCount, setPendingCount] = useState<number>(0);
+  const [message, setMessage] = useState<string | null>(null); const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [batchLoading, setBatchLoading] = useState<boolean>(false); const [tiktokStatus, setTiktokStatus] = useState<Record<string, string>>({});
+  const [preflightScores, setPreflightScores] = useState<Record<string, { score: number; recommendation: string }>>({});
+
+  const fetchPreflightScore = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/queue/preflight?postPlanId=${postId}`);
+      if (response.ok) {
+        const data = (await response.json()) as { score: number; recommendation: string };
+        setPreflightScores((prev) => ({ ...prev, [postId]: data }));
+      }
+    } catch {
+      // Ignore errors for preflight scoring
+    }
+  };
 
   const refresh = async () => {
     const response = await fetch("/api/queue");
-    const data = (await response.json()) as { plans: PostPlan[] };
+    const data = (await response.json()) as { plans: QueuePlan[] };
     setPlans(data.plans ?? []);
+    for (const plan of data.plans ?? []) {
+      if (plan.renderPath && !plan.tiktokPublishId) {
+        void fetchPreflightScore(plan.id);
+      }
+    }
 
     const statusResponse = await fetch("/api/queue/status");
     const status = (await statusResponse.json()) as { draftCount: number; pendingCount: number };
@@ -156,6 +134,33 @@ export default function QueuePage() {
     }
     setLoadingId(null);
     await refresh();
+  };
+
+  const handleCheckStatus = async (postPlanId: string) => {
+    setMessage(null);
+    setLoadingId(postPlanId);
+    try {
+      const response = await fetch(`/api/tiktok/publish-status?postPlanId=${postPlanId}`);
+      const data = (await response.json()) as {
+        status?: string;
+        failReason?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        setMessage(data.error ?? "Status check failed.");
+      } else {
+        setTiktokStatus((prev) => ({ ...prev, [postPlanId]: data.status ?? "UNKNOWN" }));
+        if (data.status === "FAILED" && data.failReason) {
+          setMessage(`TikTok: ${data.status} - ${data.failReason}`);
+        } else {
+          setMessage(`TikTok: ${data.status}`);
+        }
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Status check failed.");
+    } finally {
+      setLoadingId(null);
+    }
   };
 
   const handleDeleteOne = async (postPlanId: string) => {
@@ -271,88 +276,22 @@ export default function QueuePage() {
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {plans.length === 0 ? (
-          <div style={{ ...cardStyle, textAlign: 'center', color: '#64748b' }}>No plans generated yet.</div>
+          <div style={emptyCardStyle}>No plans generated yet.</div>
         ) : (
           plans.map((post) => (
-            <div key={post.id} style={cardStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>POST #{post.id.slice(0, 8)}</div>
-                  <h3 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', whiteSpace: "pre-line" }}>
-                    {post.onscreenText}
-                  </h3>
-                  <p style={{ fontSize: 16, color: '#475569', marginTop: 8 }}>{post.caption}</p>
-                </div>
-                <div style={badgeStyle(post.status)}>{post.status}</div>
-              </div>
-
-              {post.renderPath ? (
-                <video
-                  src={`/api/render/${post.id}/file?v=${post.renderHash ?? post.id}`}
-                  controls
-                  playsInline
-                  preload="auto"
-                  style={{
-                    width: "100%",
-                    maxWidth: 240,
-                    aspectRatio: "9 / 16",
-                    height: "auto",
-                    borderRadius: 16,
-                    backgroundColor: "#0f172a",
-                    objectFit: "cover"
-                  }}
-                />
-              ) : null}
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, padding: '24px 0', borderTop: '1px solid #f1f5f9' }}>
-                <div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>CONTAINER</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>{post.container}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>COMPATIBILITY</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>{(post.compatibilityScore * 100).toFixed(0)}%</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>CLIPS</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>{post.clips.length} items</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>SCHEDULED</div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', marginTop: 4 }}>{post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString() : 'Manual'}</div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <ActionButton
-                  label={loadingId === post.id ? "Regenerating..." : "Regenerate"}
-                  variant="ghost"
-                  title="Delete and create a new version of this plan."
-                  onClick={() => handleRegenerateOne(post.id)}
-                  disabled={loadingId === post.id || batchLoading}
-                />
-                <ActionButton
-                  label={loadingId === post.id ? "Deleting..." : "Delete"}
-                  variant="ghost"
-                  title="Delete this plan."
-                  onClick={() => handleDeleteOne(post.id)}
-                  disabled={loadingId === post.id || batchLoading}
-                />
-                <ActionButton
-                  label={loadingId === post.id ? "Rendering..." : "Render"}
-                  variant="secondary"
-                  title="Render this plan into a video."
-                  onClick={() => handleRenderOne(post.id)}
-                  disabled={loadingId === post.id || batchLoading}
-                />
-                <ActionButton
-                  label={loadingId === post.id ? "Uploading..." : "Upload Now"}
-                  title="Upload this as a TikTok draft."
-                  onClick={() => handleUploadOne(post.id)}
-                  disabled={loadingId === post.id || batchLoading}
-                />
-              </div>
-            </div>
+            <QueuePlanCard
+              key={post.id}
+              plan={post}
+              loadingId={loadingId}
+              batchLoading={batchLoading}
+              preflight={preflightScores[post.id]}
+              tiktokStatus={tiktokStatus[post.id]}
+              onRegenerate={handleRegenerateOne}
+              onDelete={handleDeleteOne}
+              onRender={handleRenderOne}
+              onUpload={handleUploadOne}
+              onCheckStatus={handleCheckStatus}
+            />
           ))
         )}
       </section>
