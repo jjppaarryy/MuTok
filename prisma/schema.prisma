@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TikTokAuth {
+  id           String   @id @default(cuid())
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scopes       String
+  openId       String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model Clip {
+  id          String   @id @default(cuid())
+  filePath    String
+  category    String
+  energy      Int
+  motion      String
+  sync        String
+  vibe        String
+  durationSec Float
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+  @@index([sync])
+  @@index([energy])
+}
+
+model Track {
+  id          String    @id @default(cuid())
+  filePath    String
+  title       String
+  bpm         Int?
+  key         String?
+  durationSec Float?
+  createdAt   DateTime  @default(now())
+  snippets    Snippet[]
+
+  @@index([title])
+}
+
+model Snippet {
+  id          String  @id @default(cuid())
+  trackId     String
+  startSec    Float
+  durationSec Float
+  energyScore Float
+  energy      Int?
+  section     String?
+  vibe        String?
+  approved    Boolean @default(false)
+  moment3to7  Boolean @default(false)
+  moment7to11 Boolean @default(false)
+  track       Track   @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+  @@index([approved])
+  @@index([trackId, approved])
+}
+
+model HookFamily {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  enabled   Boolean  @default(true)
+  templates Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([enabled])
+}
+
+model PostPlan {
+  id                 String   @id @default(cuid())
+  scheduledFor       DateTime
+  container          String
+  clipIds            Json
+  trackId            String
+  snippetId          String
+  snippetStartSec    Float?
+  snippetDurationSec Float?
+  onscreenText       String
+  caption            String
+  hookFamily         String
+  recipeId           String?
+  variantId          String?
+  ctaId              String?
+  experimentFlags    Json?
+  compatibilityScore Float
+  reasons            Json
+  status             String
+  renderPath         String?
+  renderHash         String?
+  tiktokPublishId    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now()) @updatedAt
+  metrics            Metric[]
+
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([createdAt])
+  @@index([status, scheduledFor])
+  @@index([trackId])
+  @@index([snippetId])
+  @@index([recipeId])
+  @@index([variantId])
+}
+
+model HookRecipe {
+  id                   String     @id @default(cuid())
+  name                 String     @unique
+  enabled              Boolean    @default(true)
+  locked               Boolean    @default(false)
+  beat1Templates       Json
+  beat2Templates       Json
+  ctaType              String
+  allowedSnippetTypes  Json
+  disallowedContainers Json
+  source               String?
+  inspoItemId          String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @default(now()) @updatedAt
+  inspoItem            InspoItem? @relation(fields: [inspoItemId], references: [id])
+  variants             Variant[]
+
+  @@index([enabled])
+  @@index([inspoItemId])
+}
+
+model Cta {
+  id        String    @id @default(cuid())
+  name      String
+  template  String
+  intent    String
+  status    String    @default("active")
+  locked    Boolean   @default(false)
+  createdBy String    @default("system")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  variants  Variant[]
+
+  @@index([status])
+  @@index([intent])
+}
+
+model Variant {
+  id              String     @id @default(cuid())
+  recipeId        String
+  beat1           String
+  beat2           String
+  captionTemplate String?
+  ctaId           String?
+  status          String     @default("active")
+  locked          Boolean    @default(false)
+  createdBy       String     @default("ai")
+  source          String?
+  inspoItemId     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now()) @updatedAt
+  inspoItem       InspoItem? @relation(fields: [inspoItemId], references: [id])
+  cta             Cta?       @relation(fields: [ctaId], references: [id])
+  recipe          HookRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@index([ctaId])
+  @@index([status])
+  @@index([inspoItemId])
+}
+
+model ArmStats {
+  id          String    @id @default(cuid())
+  armType     String
+  armId       String
+  impressions Int       @default(0)
+  conversions Int       @default(0)
+  rewardSum   Float     @default(0)
+  pulls       Int       @default(0)
+  lastUsedAt  DateTime?
+  alpha       Float     @default(1)
+  beta        Float     @default(1)
+  mean        Float     @default(0)
+  variance    Float     @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([armType, armId])
+  @@index([armType])
+  @@index([pulls])
+  @@index([lastUsedAt])
+}
+
+model Metric {
+  id            String   @id @default(cuid())
+  postPlanId    String
+  tiktokVideoId String   @unique
+  createTime    DateTime
+  views         Int
+  likes         Int
+  comments      Int
+  shares        Int
+  rewardScore   Float?
+  followerDelta Int?
+  collectedAt   DateTime @default(now())
+  postPlan      PostPlan @relation(fields: [postPlanId], references: [id], onDelete: Cascade)
+
+  @@index([postPlanId])
+  @@index([createTime])
+  @@index([collectedAt])
+  @@index([rewardScore])
+}
+
+model RunLog {
+  id             String    @id @default(cuid())
+  runType        String
+  startedAt      DateTime
+  finishedAt     DateTime?
+  status         String
+  error          String?
+  payloadExcerpt String?
+
+  @@index([runType])
+  @@index([status])
+  @@index([startedAt])
+  @@index([runType, status])
+}
+
+model InspoItem {
+  id           String       @id @default(cuid())
+  source       String
+  sourceId     String?
+  title        String?
+  contentType  String?
+  assetType    String?
+  linkOriginal String?
+  copyRewrite  String?
+  whyItWorks   String?
+  description  String?
+  howToUse     String?
+  themeTags    Json?
+  purposeTags  Json?
+  genreTags    Json?
+  hashtags     Json?
+  stats        Json?
+  createdTime  DateTime?
+  seedPatterns Json?
+  favorite     Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  recipes      HookRecipe[]
+  variants     Variant[]
+
+  @@unique([source, sourceId])
+  @@index([source])
+  @@index([sourceId])
+  @@index([assetType])
+  @@index([favorite])
+  @@index([createdAt])
+}
+
+model InspoImportLog {
+  id        String   @id @default(cuid())
+  source    String?
+  rawJson   Json
+  imported  Int
+  skipped   Int
+  errors    Json?
+  createdAt DateTime @default(now())
+
+  @@index([source])
+  @@index([createdAt])
+}

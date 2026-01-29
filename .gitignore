@@ -1,0 +1,11 @@
+node_modules
+.next
+.env.local
+prisma/dev.db
+dev.db
+data/clips
+data/tracks
+data/renders
+dist
+*.log
+.DS_Store
