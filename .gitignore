@@ -3,6 +3,7 @@ node_modules
 .env.local
 prisma/dev.db
 dev.db
+data/*.db
 data/clips
 data/tracks
 data/renders

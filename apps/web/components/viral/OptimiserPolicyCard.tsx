@@ -43,8 +43,14 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
       <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
         Optimiser policy
       </div>
+      <div style={{ fontSize: 14, color: "#64748b" }}>
+        Controls how aggressively the system explores vs. sticks to winners.
+      </div>
       <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
         Exploration budget
+        <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", textTransform: "none" }}>
+          Higher = more experiments, lower = more stability.
+        </div>
         <input
           type="number"
           min={0}
@@ -59,6 +65,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
       </label>
       <label style={{ display: "block", fontSize: 14, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
         Media exploration budget (clips/snippets)
+        <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", textTransform: "none" }}>
+          Controls how much the system tests new media.
+        </div>
         <input
           type="number"
           min={0}
@@ -74,6 +83,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Min views before counting
+          <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+            Avoids judging too early.
+          </div>
           <input
             type="number"
             min={0}
@@ -86,6 +98,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
         </label>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Min pulls before exploit (clips/snippets)
+          <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+            Tests media before committing.
+          </div>
           <input
             type="number"
             min={0}
@@ -99,6 +114,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
         </label>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Max locked share
+          <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+            Limits how much can be locked to winners.
+          </div>
           <input
             type="number"
             min={0}
@@ -168,6 +186,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, borderTop: "1px solid #f1f5f9", paddingTop: 24 }}>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Autopilot enabled
+          <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+            Automatically runs testing on a schedule.
+          </div>
           <input
             type="checkbox"
             checked={policy.autopilot_enabled}
@@ -177,6 +198,9 @@ export default function OptimiserPolicyCard({ policy, onUpdate }: OptimiserPolic
         </label>
         <label style={{ ...labelStyle, flexDirection: "column", alignItems: "flex-start" }}>
           Autopilot interval (hours)
+          <div style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+            How often to re-run tests.
+          </div>
           <input
             type="number"
             min={1}

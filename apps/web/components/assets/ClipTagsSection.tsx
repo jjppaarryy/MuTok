@@ -1,21 +1,32 @@
 import { useMemo, useState } from "react";
 import ClipCard from "./ClipCard";
 import ActionButton from "../ActionButton";
+import { clipMomentLabels, normalizeClipCategory } from "../../lib/clipCategories";
 
 type Clip = {
   id: string;
   filePath: string;
   category: string;
-  energy: number;
-  motion: string;
   sync: string;
-  vibe: string;
   createdAt?: string;
+  clipSetItems?: {
+    clipSetId: string;
+    clipSet: {
+      id: string;
+      name: string;
+    };
+  }[];
+};
+
+type ClipSet = {
+  id: string;
+  name: string;
 };
 
 type ClipTagsSectionProps = {
   clips: Clip[];
-  onUpdate: (id: string, updates: Partial<Clip>) => Promise<void>;
+  clipSets: ClipSet[];
+  onUpdate: (id: string, updates: Partial<Clip> & { clipSetIds?: string[] }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 };
 
@@ -29,11 +40,16 @@ const searchInputStyle: React.CSSProperties = {
   color: "#0f172a"
 };
 
-export default function ClipTagsSection({ clips, onUpdate, onDelete }: ClipTagsSectionProps) {
+export default function ClipTagsSection({
+  clips,
+  clipSets,
+  onUpdate,
+  onDelete
+}: ClipTagsSectionProps) {
   const [clipSearch, setClipSearch] = useState<string>("");
   const [clipPage, setClipPage] = useState<number>(1);
   const [clipCategory, setClipCategory] = useState<string>("all");
-  const [clipVibe, setClipVibe] = useState<string>("all");
+  const [clipSetFilter, setClipSetFilter] = useState<string>("all");
   const [clipSync, setClipSync] = useState<string>("all");
   const [clipSort, setClipSort] = useState<string>("newest");
   const [compactView, setCompactView] = useState<boolean>(false);
@@ -43,24 +59,34 @@ export default function ClipTagsSection({ clips, onUpdate, onDelete }: ClipTagsS
     return clips
       .filter((clip) => {
         if (!normalizedQuery) return true;
+        const clipSetNames = (clip.clipSetItems ?? [])
+          .map((item) => item.clipSet?.name ?? "")
+          .join(" ");
+        const categoryLabel = clipMomentLabels[normalizeClipCategory(clip.category)];
         return (
           clip.filePath.toLowerCase().includes(normalizedQuery) ||
           clip.category.toLowerCase().includes(normalizedQuery) ||
-          clip.vibe.toLowerCase().includes(normalizedQuery)
+          categoryLabel.toLowerCase().includes(normalizedQuery) ||
+          clipSetNames.toLowerCase().includes(normalizedQuery)
         );
       })
-      .filter((clip) => (clipCategory === "all" ? true : clip.category === clipCategory))
-      .filter((clip) => (clipVibe === "all" ? true : clip.vibe === clipVibe))
+      .filter((clip) =>
+        clipCategory === "all"
+          ? true
+          : normalizeClipCategory(clip.category) === clipCategory
+      )
+      .filter((clip) =>
+        clipSetFilter === "all"
+          ? true
+          : (clip.clipSetItems ?? []).some((item) => item.clipSetId === clipSetFilter)
+      )
       .filter((clip) => (clipSync === "all" ? true : clip.sync === clipSync));
-  }, [clips, clipSearch, clipCategory, clipVibe, clipSync]);
+  }, [clips, clipSearch, clipCategory, clipSetFilter, clipSync]);
 
   const sortedClips = useMemo(() => {
     return [...filteredClips].sort((a, b) => {
       if (clipSort === "name") {
         return a.filePath.localeCompare(b.filePath);
-      }
-      if (clipSort === "energy") {
-        return b.energy - a.energy;
       }
       if (clipSort === "oldest") {
         const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -108,31 +134,26 @@ export default function ClipTagsSection({ clips, onUpdate, onDelete }: ClipTagsS
                   setClipPage(1);
                 }}
               >
-                <option value="all">All categories</option>
-                <option value="DAW_screen">DAW screen</option>
-                <option value="Studio_portrait">Studio portrait</option>
-                <option value="Hands_knobs_faders">Hands / knobs</option>
-                <option value="Hands_keys_abstract">Hands / keys (abstract)</option>
-                <option value="Hands_keys_literal">Hands / keys (literal)</option>
-                <option value="Lifestyle_broll">Lifestyle</option>
-                <option value="Abstract_visual">Abstract</option>
-                <option value="Text_background">Text background</option>
-                <option value="DJing">DJing</option>
-                <option value="Crowd_stage">Crowd / stage</option>
+                <option value="all">All moments</option>
+                <option value="calm">Calm (no drums)</option>
+                <option value="build">Build (rising)</option>
+                <option value="peak">Peak (drums)</option>
+                <option value="neutral">Neutral</option>
               </select>
               <select
                 style={{ ...searchInputStyle, width: 140 }}
-                value={clipVibe}
+                value={clipSetFilter}
                 onChange={(event) => {
-                  setClipVibe(event.target.value);
+                  setClipSetFilter(event.target.value);
                   setClipPage(1);
                 }}
               >
-                <option value="all">All vibes</option>
-                <option value="bright_clean">Bright clean</option>
-                <option value="dark_moody">Dark moody</option>
-                <option value="neon_club">Neon club</option>
-                <option value="warm_home">Warm home</option>
+                <option value="all">All clip sets</option>
+                {clipSets.map((set) => (
+                  <option key={set.id} value={set.id}>
+                    {set.name}
+                  </option>
+                ))}
               </select>
               <select
                 style={{ ...searchInputStyle, width: 120 }}
@@ -155,7 +176,6 @@ export default function ClipTagsSection({ clips, onUpdate, onDelete }: ClipTagsS
                 <option value="newest">Newest</option>
                 <option value="oldest">Oldest</option>
                 <option value="name">Name</option>
-                <option value="energy">Energy</option>
               </select>
               <ActionButton
                 label={compactView ? "Roomy" : "Compact"}
@@ -180,6 +200,7 @@ export default function ClipTagsSection({ clips, onUpdate, onDelete }: ClipTagsS
               <ClipCard
                 key={clip.id}
                 clip={clip}
+                clipSets={clipSets}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
                 compact={compactView}

@@ -41,6 +41,8 @@ export const buildCtaMatchers = (): Record<string, string[]> => ({
     "one of them"
   ],
   FOLLOW_FULL: ["follow"],
+  SAVE_REWATCH: ["save", "rewatch", "watch again", "loop it", "play it again"],
+  LINK_DM: ["link", "dm", "message me", "in bio", "bio"],
   PICK_AB: ["pick", "a/b", "choose"]
 });
 
@@ -53,24 +55,24 @@ export const deriveCtaIntent = (params: {
   const allowed = params.allowed.length ? params.allowed : Object.keys(buildCtaMatchers());
   const prefer = (intents: string[]) => intents.find((intent) => allowed.includes(intent));
   if (params.container === "montage") {
-    return prefer(["KEEP_SKIP", "PICK_AB", "COMMENT_VIBE", "FOLLOW_FULL"]) ?? allowed[0];
+    return prefer(["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "SAVE_REWATCH", "LINK_DM", "PICK_AB"]) ?? allowed[0];
   }
   if (params.hookFamily === "wait_for_it") {
     const hasMoment = params.snippet?.moment3to7 || params.snippet?.moment7to11;
     return hasMoment
-      ? prefer(["COMMENT_VIBE", "KEEP_SKIP", "PICK_AB"]) ?? allowed[0]
-      : prefer(["KEEP_SKIP", "PICK_AB"]) ?? allowed[0];
+      ? prefer(["COMMENT_VIBE", "KEEP_SKIP", "SAVE_REWATCH", "FOLLOW_FULL", "LINK_DM", "PICK_AB"]) ?? allowed[0]
+      : prefer(["KEEP_SKIP", "SAVE_REWATCH", "FOLLOW_FULL", "LINK_DM", "PICK_AB"]) ?? allowed[0];
   }
   if (params.hookFamily === "youre_early") {
-    return prefer(["KEEP_SKIP", "FOLLOW_FULL", "COMMENT_VIBE"]) ?? allowed[0];
+    return prefer(["KEEP_SKIP", "FOLLOW_FULL", "COMMENT_VIBE", "SAVE_REWATCH", "LINK_DM"]) ?? allowed[0];
   }
   if (params.hookFamily === "dj_context") {
-    return prefer(["COMMENT_VIBE", "KEEP_SKIP"]) ?? allowed[0];
+    return prefer(["COMMENT_VIBE", "KEEP_SKIP", "SAVE_REWATCH", "FOLLOW_FULL", "LINK_DM"]) ?? allowed[0];
   }
   if (params.hookFamily === "emotional_lift") {
-    return prefer(["COMMENT_VIBE", "KEEP_SKIP"]) ?? allowed[0];
+    return prefer(["COMMENT_VIBE", "KEEP_SKIP", "SAVE_REWATCH", "FOLLOW_FULL", "LINK_DM"]) ?? allowed[0];
   }
-  return prefer(["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "PICK_AB"]) ?? allowed[0];
+  return prefer(["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "SAVE_REWATCH", "LINK_DM", "PICK_AB"]) ?? allowed[0];
 };
 
 export const enforceCtaIntent = (line2: string, intent: string) => {

@@ -29,7 +29,7 @@ const buildPrompt = (winners: Array<{ name: string; beat1: string; beat2: string
     "- beat1Text",
     "- beat2Text",
     "- captionText",
-    "- ctaType (KEEP_SKIP | COMMENT_VIBE | FOLLOW_FULL | PICK_AB)",
+    "- ctaType (KEEP_SKIP | COMMENT_VIBE | FOLLOW_FULL | SAVE_REWATCH | LINK_DM | PICK_AB)",
     "- containerAllowed (static_daw | montage | both)",
     "- allowedSnippetTypes (array; use moment_3_7, moment_7_11, or empty)",
     "",

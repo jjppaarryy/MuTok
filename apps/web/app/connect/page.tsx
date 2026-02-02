@@ -117,6 +117,19 @@ export default function ConnectPage() {
     void loadData();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const errorParam = params.get("error");
+    if (connected) {
+      setMessage("TikTok connected successfully.");
+    }
+    if (errorParam) {
+      setError(errorParam);
+    }
+  }, []);
+
   const updateEnv = (key: keyof EnvInputs, value: string) => {
     setEnvValues((prev) => ({ ...prev, [key]: value }));
   };

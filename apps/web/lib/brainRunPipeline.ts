@@ -11,8 +11,8 @@ type BrainRunResponse = {
 
 export async function runBrainPipeline(): Promise<BrainRunResponse> {
   const context = await loadBrainContext();
-  const { payload, systemPrompt } = await buildBrainPayload(context);
-  const result = await runBrain(payload, systemPrompt);
+  const { payload } = await buildBrainPayload(context);
+  const result = await runBrain(payload);
   const { created, skipped } = await processBrainPlan(
     context,
     result.plan,

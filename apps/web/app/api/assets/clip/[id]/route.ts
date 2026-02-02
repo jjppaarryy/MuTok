@@ -9,21 +9,29 @@ export async function PUT(
   const { id } = await context.params;
   const body = (await request.json()) as {
     category?: string;
-    energy?: number;
-    motion?: string;
     sync?: string;
-    vibe?: string;
+    clipSetIds?: string[] | null;
   };
 
-  const updated = await prisma.clip.update({
-    where: { id },
-    data: {
-      category: body.category,
-      energy: body.energy,
-      motion: body.motion,
-      sync: body.sync,
-      vibe: body.vibe
+  const updated = await prisma.$transaction(async (tx) => {
+    const clip = await tx.clip.update({
+      where: { id },
+      data: {
+        category: body.category,
+        sync: body.sync
+      }
+    });
+
+    if (body.clipSetIds) {
+      await tx.clipSetItem.deleteMany({ where: { clipId: id } });
+      if (body.clipSetIds.length > 0) {
+        await tx.clipSetItem.createMany({
+          data: body.clipSetIds.map((clipSetId) => ({ clipId: id, clipSetId }))
+        });
+      }
     }
+
+    return clip;
   });
 
   return NextResponse.json({ clip: updated });

@@ -1,36 +1,28 @@
 import { Trash2 } from "lucide-react";
 import InlineTip from "../InlineTip";
+import { clipMomentLabels, clipMoments, normalizeClipCategory } from "../../lib/clipCategories";
 
 type Clip = {
   id: string;
   filePath: string;
   category: string;
-  energy: number;
-  motion: string;
   sync: string;
-  vibe: string;
+  clipSetItems?: {
+    clipSetId: string;
+    clipSet: {
+      id: string;
+      name: string;
+    };
+  }[];
 };
 
-const categories = [
-  "DAW_screen",
-  "Studio_portrait",
-  "Hands_knobs_faders",
-  "Hands_keys_abstract",
-  "Hands_keys_literal",
-  "Lifestyle_broll",
-  "Abstract_visual",
-  "Text_background",
-  "DJing",
-  "Crowd_stage"
-];
-
-const motions = ["low", "med", "high"];
 const syncs = ["safe", "sensitive", "critical"];
-const vibes = ["bright_clean", "dark_moody", "neon_club", "warm_home"];
+type ClipSet = { id: string; name: string };
 
 type ClipCardProps = {
   clip: Clip;
-  onUpdate: (id: string, updates: Partial<Clip>) => Promise<void>;
+  clipSets: ClipSet[];
+  onUpdate: (id: string, updates: Partial<Clip> & { clipSetIds?: string[] }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   compact?: boolean;
 };
@@ -59,8 +51,11 @@ const fileName = (filePath: string) => {
   return parts[parts.length - 1] ?? filePath;
 };
 
-export default function ClipCard({ clip, onUpdate, onDelete, compact }: ClipCardProps) {
+export default function ClipCard({ clip, clipSets, onUpdate, onDelete, compact }: ClipCardProps) {
   const previewSize = compact ? { width: 150, height: 268 } : { width: 170, height: 302 };
+  const selectedClipSetIds = new Set(
+    (clip.clipSetItems ?? []).map((item) => item.clipSetId)
+  );
   return (
     <div className="card dashboard-card" style={{ display: "grid", gap: compact ? 16 : 24 }}>
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
@@ -115,50 +110,17 @@ export default function ClipCard({ clip, onUpdate, onDelete, compact }: ClipCard
       >
         <label style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={labelStyle}>Category</span>
-            <InlineTip text="What kind of visual is this? Pick the closest match." />
+            <span style={labelStyle}>Moment</span>
+            <InlineTip text="How this visual feels vs the music moment." />
           </div>
           <select
             style={fieldStyle}
-            value={clip.category}
+            value={normalizeClipCategory(clip.category)}
             onChange={(event) => onUpdate(clip.id, { category: event.target.value })}
           >
-            {categories.map((category) => (
+            {clipMoments.map((category) => (
               <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={labelStyle}>Energy</span>
-            <InlineTip text="How intense does this clip feel? 1 = calm, 5 = peak." />
-          </div>
-          <input
-            type="number"
-            min={1}
-            max={5}
-            value={clip.energy}
-            onChange={(event) => onUpdate(clip.id, { energy: Number(event.target.value) })}
-            style={fieldStyle}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={labelStyle}>Motion</span>
-            <InlineTip text="How much movement is in the clip? low / med / high." />
-          </div>
-          <select
-            style={fieldStyle}
-            value={clip.motion}
-            onChange={(event) => onUpdate(clip.id, { motion: event.target.value })}
-          >
-            {motions.map((motion) => (
-              <option key={motion} value={motion}>
-                {motion}
+                {clipMomentLabels[category]}
               </option>
             ))}
           </select>
@@ -184,17 +146,29 @@ export default function ClipCard({ clip, onUpdate, onDelete, compact }: ClipCard
 
         <label style={{ display: "grid", gap: 8, gridColumn: "span 2" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={labelStyle}>Vibe</span>
-            <InlineTip text="Overall feel of the clip (color/mood/setting)." />
+            <span style={labelStyle}>Clip Sets</span>
+            <InlineTip text="Pick sets this clip belongs to (keep consistent outfits/lighting)." />
           </div>
           <select
             style={fieldStyle}
-            value={clip.vibe}
-            onChange={(event) => onUpdate(clip.id, { vibe: event.target.value })}
+            multiple
+            size={Math.min(4, Math.max(2, clipSets.length || 2))}
+            value={[...selectedClipSetIds]}
+            onChange={(event) => {
+              const selected = Array.from(event.currentTarget.selectedOptions).map(
+                (option) => option.value
+              );
+              onUpdate(clip.id, { clipSetIds: selected });
+            }}
           >
-            {vibes.map((vibe) => (
-              <option key={vibe} value={vibe}>
-                {vibe}
+            {clipSets.length === 0 ? (
+              <option value="" disabled>
+                No clip sets yet
+              </option>
+            ) : null}
+            {clipSets.map((set) => (
+              <option key={set.id} value={set.id}>
+                {set.name}
               </option>
             ))}
           </select>

@@ -2,7 +2,14 @@ import { prisma } from "./prisma";
 
 export type ArmType = "RECIPE" | "CTA" | "CONTAINER" | "VARIANT" | "CLIP" | "SNIPPET" | "CLIP_CATEGORY" | "SNIPPET_STRATEGY";
 
-const defaultCtas = [{ name: "KEEP/SKIP", template: "KEEP or SKIP?", intent: "KEEP_SKIP" }, { name: "Comment vibe", template: "What vibe is this?", intent: "COMMENT_VIBE" }, { name: "Follow for full", template: "Follow for the full ID.", intent: "FOLLOW_FULL" }, { name: "Pick A/B", template: "A or B?", intent: "PICK_AB" }];
+const defaultCtas = [
+  { name: "Hold or skip", template: "KEEP or SKIP?", intent: "KEEP_SKIP" },
+  { name: "Comment prompt", template: "What vibe is this?", intent: "COMMENT_VIBE" },
+  { name: "Follow for more", template: "Follow for the full ID.", intent: "FOLLOW_FULL" },
+  { name: "Save / rewatch", template: "Save this for later.", intent: "SAVE_REWATCH" },
+  { name: "Link / DM", template: "Link in bio.", intent: "LINK_DM" },
+  { name: "Pick A/B (legacy)", template: "A or B?", intent: "PICK_AB" }
+];
 
 export async function ensureDefaultCtas() {
   const count = await prisma.cta.count();

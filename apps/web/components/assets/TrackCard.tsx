@@ -7,9 +7,7 @@ type Snippet = {
   startSec: number;
   durationSec: number;
   energyScore: number;
-  energy?: number | null;
   section?: string | null;
-  vibe?: string | null;
   approved: boolean;
   moment3to7?: boolean;
   moment7to11?: boolean;
@@ -27,7 +25,12 @@ type Track = {
 
 type TrackCardProps = {
   track: Track;
-  onAddSnippet: (trackId: string, startSec: number, durationSec: number) => Promise<void>;
+  onAddSnippet: (
+    trackId: string,
+    startSec: number,
+    durationSec: number,
+    section: string | null
+  ) => Promise<void>;
   onDeleteSnippet: (snippetId: string) => Promise<void>;
   onUpdateSnippet: (snippetId: string, updates: Partial<Snippet>) => Promise<void>;
 };

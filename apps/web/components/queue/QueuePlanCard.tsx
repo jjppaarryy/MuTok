@@ -19,6 +19,7 @@ export type QueuePlan = {
   tiktokPublishId?: string | null;
   clips: Clip[];
   recipeName?: string | null;
+  warnings?: string[];
 };
 
 type QueuePlanCardProps = {
@@ -56,6 +57,52 @@ const badgeStyle = (status: string): React.CSSProperties => ({
   border: status === "RENDERED" ? "1px solid #a7f3d0" : "1px solid #e2e8f0"
 });
 
+const confidenceStyle = (tone: "ready" | "review" | "blocked"): React.CSSProperties => ({
+  padding: "6px 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  backgroundColor:
+    tone === "ready" ? "#ecfdf5" : tone === "review" ? "#fff7ed" : "#fef2f2",
+  color: tone === "ready" ? "#065f46" : tone === "review" ? "#b45309" : "#991b1b",
+  border:
+    tone === "ready" ? "1px solid #a7f3d0" : tone === "review" ? "1px solid #fed7aa" : "1px solid #fecaca"
+});
+
+const normalizeWarning = (warning: string) => {
+  return warning
+    .replace(/guardrails/gi, "rules")
+    .replace(/\.$/, "")
+    .replace(/^Planner\s*/i, "");
+};
+
+const getWhyPicked = (plan: QueuePlan) => {
+  const warning = plan.warnings?.[0];
+  if (warning) {
+    return `Relaxed rule: ${normalizeWarning(warning)}`;
+  }
+  if (plan.compatibilityScore >= 0.7) {
+    return "Strong clip + snippet fit.";
+  }
+  if (plan.compatibilityScore >= 0.5) {
+    return "Balanced clip + snippet fit.";
+  }
+  return "Low fit — review visuals before posting.";
+};
+
+const getConfidence = (
+  plan: QueuePlan,
+  preflight?: { score: number; recommendation: string }
+) => {
+  const recommendation = preflight?.recommendation;
+  if (recommendation === "upload") return { label: "Ready", tone: "ready" as const };
+  if (recommendation === "review") return { label: "Review", tone: "review" as const };
+  if (recommendation === "block") return { label: "Blocked", tone: "blocked" as const };
+  if (plan.warnings && plan.warnings.length > 0) return { label: "Review", tone: "review" as const };
+  return { label: "Ready", tone: "ready" as const };
+};
+
 export default function QueuePlanCard({
   plan,
   loadingId,
@@ -68,6 +115,8 @@ export default function QueuePlanCard({
   onUpload,
   onCheckStatus
 }: QueuePlanCardProps) {
+  const confidence = getConfidence(plan, preflight);
+  const whyPicked = getWhyPicked(plan);
   return (
     <div style={cardStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -79,8 +128,14 @@ export default function QueuePlanCard({
             {plan.onscreenText}
           </h3>
           <p style={{ fontSize: 16, color: "#475569", marginTop: 8 }}>{plan.caption}</p>
+          <div style={{ marginTop: 10, color: "#64748b", fontSize: 13, fontWeight: 600 }}>
+            {whyPicked}
+          </div>
         </div>
-        <div style={badgeStyle(plan.status)}>{plan.status}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+          <div style={confidenceStyle(confidence.tone)}>{confidence.label}</div>
+          <div style={badgeStyle(plan.status)}>{plan.status}</div>
+        </div>
       </div>
 
       {plan.renderPath ? (
@@ -103,7 +158,7 @@ export default function QueuePlanCard({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 24, padding: "24px 0", borderTop: "1px solid #f1f5f9" }}>
         <div>
-          <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>RECIPE</div>
+          <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>HOOK</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "#1e293b", marginTop: 4 }}>
             {plan.recipeName ?? "—"}
           </div>
@@ -147,37 +202,43 @@ export default function QueuePlanCard({
         </div>
       </div>
 
+      {plan.warnings && plan.warnings.length > 0 ? (
+        <div style={{ padding: "12px 16px", borderRadius: 12, backgroundColor: "#fff7ed", color: "#9a3412", fontSize: 13, fontWeight: 600 }}>
+          Planner notes: {plan.warnings.map(normalizeWarning).join(" • ")}
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", gap: 12 }}>
         <ActionButton
-          label={loadingId === plan.id ? "Regenerating..." : "Regenerate"}
+          label={loadingId === plan.id ? "Remaking..." : "Remake"}
           variant="ghost"
-          title="Delete and create a new version of this plan."
+          title="Delete and create a new version of this draft."
           onClick={() => onRegenerate(plan.id)}
           disabled={loadingId === plan.id || batchLoading}
         />
         <ActionButton
-          label={loadingId === plan.id ? "Deleting..." : "Delete"}
+          label={loadingId === plan.id ? "Removing..." : "Remove"}
           variant="ghost"
-          title="Delete this plan."
+          title="Remove this draft."
           onClick={() => onDelete(plan.id)}
           disabled={loadingId === plan.id || batchLoading}
         />
         <ActionButton
-          label={loadingId === plan.id ? "Rendering..." : "Render"}
+          label={loadingId === plan.id ? "Rendering..." : "Render draft"}
           variant="secondary"
-          title="Render this plan into a video."
+          title="Render this draft into a video."
           onClick={() => onRender(plan.id)}
           disabled={loadingId === plan.id || batchLoading}
         />
         <ActionButton
-          label={loadingId === plan.id ? "Uploading..." : "Upload Now"}
-          title="Upload this as a TikTok draft."
+          label={loadingId === plan.id ? "Uploading..." : "Upload draft"}
+          title="Upload this to TikTok drafts."
           onClick={() => onUpload(plan.id)}
           disabled={loadingId === plan.id || batchLoading}
         />
         {plan.tiktokPublishId && (
           <ActionButton
-            label={loadingId === plan.id ? "Checking..." : "Check Status"}
+            label={loadingId === plan.id ? "Checking..." : "Check TikTok"}
             variant="ghost"
             title="Check TikTok processing status."
             onClick={() => onCheckStatus(plan.id)}

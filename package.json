@@ -42,6 +42,7 @@
     "files": [
       "apps/desktop/**",
       "apps/web/.next/**",
+      "!apps/web/.next/dev/**",
       "apps/web/node_modules/next/**",
       "apps/web/public/**",
       "apps/web/package.json",
@@ -55,7 +56,13 @@
         "dmg",
         "zip"
       ],
-      "icon": "/Users/jamesparry-jones/.cursor/projects/Users-jamesparry-jones-Documents-TikTok-Growth-Agent/assets/mutok-icon.png"
+      "icon": "apps/web/app/icon.png"
+    },
+    "win": {
+      "icon": "apps/web/app/icon.png"
+    },
+    "linux": {
+      "icon": "apps/web/app/icon.png"
     }
   }
 }

@@ -8,22 +8,16 @@ export async function PATCH(
   const { id } = await context.params;
   const body = (await request.json()) as {
     approved?: boolean;
-    energy?: number | null;
     section?: string | null;
-    vibe?: string | null;
   };
 
   const updates: {
     approved?: boolean;
-    energy?: number | null;
     section?: string | null;
-    vibe?: string | null;
   } = {};
 
   if (typeof body.approved === "boolean") updates.approved = body.approved;
-  if (typeof body.energy === "number" || body.energy === null) updates.energy = body.energy;
   if (typeof body.section === "string" || body.section === null) updates.section = body.section;
-  if (typeof body.vibe === "string" || body.vibe === null) updates.vibe = body.vibe;
 
   const snippet = await prisma.snippet.update({
     where: { id },

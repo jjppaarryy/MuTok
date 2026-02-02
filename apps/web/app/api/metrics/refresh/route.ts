@@ -5,19 +5,19 @@ import { runMetricsRefresh } from "../../../../lib/metricsRefresh";
 
 export async function POST() {
   try {
-    const postedCount = await prisma.postPlan.count({
-      where: { status: "POSTED" }
+    const eligibleCount = await prisma.postPlan.count({
+      where: { status: { in: ["POSTED", "UPLOADED_DRAFT", "METRICS_FETCHED"] } }
     });
-    if (postedCount === 0) {
+    if (eligibleCount === 0) {
       return NextResponse.json({
         matched: 0,
         results: [],
-        warning: "No posted videos yet."
+        warning: "No uploaded or posted videos yet."
       });
     }
     const results = await runMetricsRefresh();
     if (results.matched === 0) {
-      return NextResponse.json({ matched: 0, results: [] });
+      return NextResponse.json({ matched: 0, results: [], debug: results.debug ?? null });
     }
     return NextResponse.json(results);
   } catch (error) {

@@ -1,5 +1,5 @@
-import { inputStyle, labelStyle } from "./rulesStyles";
 import type { RulesSettings } from "../../lib/rulesConfig";
+import RuleSlider from "./RuleSlider";
 
 type Props = {
   rules: RulesSettings;
@@ -12,51 +12,46 @@ export default function RulesBasicsSection({ rules, onChange }: Props) {
       <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 16 }}>
         Basics
       </h3>
-      <div style={{ display: "grid", gap: 24, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-        <label style={labelStyle}>
-          Cadence per day
-          <input
-            type="number"
-            min={1}
-            value={rules.cadence_per_day}
-            onChange={(event) => onChange("cadence_per_day", Number(event.target.value))}
-            style={inputStyle}
-          />
-        </label>
-        <label style={labelStyle}>
-          Target queue size
-          <input
-            type="number"
-            min={1}
-            value={rules.target_queue_size}
-            onChange={(event) => onChange("target_queue_size", Number(event.target.value))}
-            style={inputStyle}
-          />
-        </label>
-        <label style={labelStyle}>
-          Explore ratio
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={rules.explore_ratio}
-            onChange={(event) => onChange("explore_ratio", Number(event.target.value))}
-            style={inputStyle}
-          />
-        </label>
-        <label style={labelStyle}>
-          Min compatibility score
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.01}
-            value={rules.min_compatibility_score}
-            onChange={(event) => onChange("min_compatibility_score", Number(event.target.value))}
-            style={inputStyle}
-          />
-        </label>
+      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>
+        Set your posting pace and how strict the matching should be.
+      </div>
+      <div className="grid-2" style={{ gap: 24 }}>
+        <RuleSlider
+          label="Posts per day"
+          value={rules.cadence_per_day}
+          min={1}
+          max={5}
+          step={1}
+          helper="How many posts the system plans each day."
+          onChange={(value) => onChange("cadence_per_day", value)}
+        />
+        <RuleSlider
+          label="Queue size target"
+          value={rules.target_queue_size}
+          min={1}
+          max={10}
+          step={1}
+          helper="How many drafts to keep ready in the queue."
+          onChange={(value) => onChange("target_queue_size", value)}
+        />
+        <RuleSlider
+          label="Explore ratio"
+          value={rules.explore_ratio}
+          min={0}
+          max={1}
+          step={0.05}
+          helper="Higher means more experimental drafts."
+          onChange={(value) => onChange("explore_ratio", value)}
+        />
+        <RuleSlider
+          label="Min match score"
+          value={rules.min_compatibility_score}
+          min={0}
+          max={1}
+          step={0.01}
+          helper="Lower allows looser pairings between clips and hooks."
+          onChange={(value) => onChange("min_compatibility_score", value)}
+        />
       </div>
     </div>
   );

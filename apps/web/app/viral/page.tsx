@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import PageHeader from "../../components/PageHeader";
 import CtaLibraryCard from "../../components/viral/CtaLibraryCard";
 import OptimiserPolicyCard from "../../components/viral/OptimiserPolicyCard";
 import ViralGuardrailsCard from "../../components/viral/ViralGuardrailsCard";
@@ -71,7 +72,7 @@ export default function ViralEnginePage() {
       require_montage_first_cut: true,
       require_moment_3_to_7: true,
       require_second_moment_7_to_11: true,
-      allowed_cta_types: ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "PICK_AB"]
+      allowed_cta_types: ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "SAVE_REWATCH", "LINK_DM", "PICK_AB"]
     },
     optimiser_policy: {
       exploration_budget: 0.3,
@@ -177,12 +178,15 @@ export default function ViralEnginePage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-      <header>
-        <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, marginBottom: 12, color: '#0f172a' }}>AI Optimisation Policy</h1>
-        <p style={{ fontSize: 17, color: '#64748b' }}>
-          Control what the optimiser can test and how strict the guardrails are.
-        </p>
-      </header>
+      <PageHeader
+        title="Testing"
+        description="Choose what the system is allowed to test while it learns."
+        tip="Use this if you want tighter control over experimentation."
+      />
+
+      <div style={{ padding: 20, borderRadius: 16, border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#475569" }}>
+        Think of these as “test boundaries.” They don’t change your hooks, they just control which variations are allowed.
+      </div>
 
       {message ? (
         <div style={{ padding: 20, borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#f0fdf4', fontSize: 14, color: '#059669' }}>
@@ -191,23 +195,41 @@ export default function ViralEnginePage() {
       ) : null}
       {schedulerStatus ? (
         <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", backgroundColor: "#fff7ed", fontSize: 13, color: "#9a3412" }}>
-          Autopilot status: {schedulerStatus.running ? "Running" : "Stopped"}{" "}
+          Autopilot: {schedulerStatus.running ? "Running" : "Stopped"}{" "}
           {schedulerStatus.mode ? `(${schedulerStatus.mode})` : ""}{" "}
           {schedulerStatus.lastRunAt ? `· Last run ${new Date(schedulerStatus.lastRunAt).toLocaleString()}` : ""}
           {schedulerStatus.lastError ? ` · Last error: ${schedulerStatus.lastError}` : ""}
         </div>
       ) : null}
-      <ViralGuardrailsCard
-        viral={rules.viral_engine}
-        onUpdate={updateViral}
-        onToggleCta={toggleCta}
-        onSave={saveSettings}
-      />
-      <OptimiserPolicyCard
-        policy={rules.optimiser_policy}
-        onUpdate={updatePolicy}
-      />
-      <CtaLibraryCard ctas={ctas} onChange={setCtas} onSave={saveCtas} />
+
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ fontSize: 14, color: "#64748b" }}>
+          Guardrails choose which beats, snippets, and CTA types are allowed in testing.
+        </div>
+        <ViralGuardrailsCard
+          viral={rules.viral_engine}
+          onUpdate={updateViral}
+          onToggleCta={toggleCta}
+          onSave={saveSettings}
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ fontSize: 14, color: "#64748b" }}>
+          Autopilot controls how fast the system explores and promotes winners.
+        </div>
+        <OptimiserPolicyCard
+          policy={rules.optimiser_policy}
+          onUpdate={updatePolicy}
+        />
+      </div>
+
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ fontSize: 14, color: "#64748b" }}>
+          CTA library lets you lock or pause specific calls-to-action.
+        </div>
+        <CtaLibraryCard ctas={ctas} onChange={setCtas} onSave={saveCtas} />
+      </div>
     </div>
   );
 }

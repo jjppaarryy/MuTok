@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import ActionButton from "../../components/ActionButton";
-import InlineTip from "../../components/InlineTip";
+import PageHeader from "../../components/PageHeader";
 import StatCard from "../../components/StatCard";
 import LeaderboardCard from "../../components/analytics/LeaderboardCard";
 import RecipeSuggestions from "../../components/analytics/RecipeSuggestions";
+import ManualMappingCard from "../../components/analytics/ManualMappingCard";
 
 type MetricsSummary = {
   totals: {
@@ -34,8 +35,16 @@ type PostPlan = {
   status: string;
 };
 
-const cardStyle: React.CSSProperties = { padding: 48, borderRadius: 24, backgroundColor: 'white', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', display: 'flex', flexDirection: 'column', gap: 24 };
-const inputStyle: React.CSSProperties = { marginTop: 12, width: '100%', borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', padding: '16px 20px', fontSize: 16, fontWeight: 500, color: '#0f172a', outline: 'none' };
+const cardStyle: React.CSSProperties = {
+  padding: 32,
+  borderRadius: 20,
+  backgroundColor: "white",
+  border: "1px solid #e2e8f0",
+  display: "flex",
+  flexDirection: "column",
+  gap: 16
+};
+
 
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
@@ -47,6 +56,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showManualMapping, setShowManualMapping] = useState<boolean>(false);
+  const [showDetails, setShowDetails] = useState<boolean>(false);
 
   const loadSummary = async () => {
     try {
@@ -66,6 +76,7 @@ export default function AnalyticsPage() {
       console.error("Failed to load summary:", err);
     }
   };
+
   const loadPlans = async () => {
     try {
       const response = await fetch("/api/queue");
@@ -78,9 +89,14 @@ export default function AnalyticsPage() {
   };
 
   useEffect(() => {
-    const loadAll = async () => { setLoading(true); await Promise.all([loadSummary(), loadPlans()]); setLoading(false); };
+    const loadAll = async () => {
+      setLoading(true);
+      await Promise.all([loadSummary(), loadPlans()]);
+      setLoading(false);
+    };
     void loadAll();
   }, []);
+
   const refreshMetrics = async () => {
     setMessage(null);
     setError(null);
@@ -99,6 +115,7 @@ export default function AnalyticsPage() {
       setRefreshing(false);
     }
   };
+
   const markPosted = async () => {
     if (!selectedPlan) {
       setError("Please select a post plan");
@@ -126,174 +143,157 @@ export default function AnalyticsPage() {
       setError(err instanceof Error ? err.message : "Failed to mark as posted");
     }
   };
+
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-        <div style={{ fontSize: 18, color: '#64748b' }}>Loading analytics...</div>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
+        <div style={{ fontSize: 18, color: "#64748b" }}>Loading learnings...</div>
       </div>
     );
   }
 
+  const totalSignals =
+    (summary?.totals.views ?? 0) +
+    (summary?.totals.likes ?? 0) +
+    (summary?.totals.comments ?? 0) +
+    (summary?.totals.shares ?? 0);
+  const hasResults = totalSignals > 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-      <header>
-        <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, marginBottom: 12, color: '#0f172a' }}>Analytics & Learning</h1>
-        <p style={{ fontSize: 17, color: '#64748b' }}>
-          Weekly learning and deterministic recipe performance.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, fontSize: 14, color: "#64748b" }}>
-          Refresh after you post on TikTok.
-          <InlineTip text="If a post doesn't match, use manual mapping below." />
-        </div>
-      </header>
-      <section style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        <ActionButton
-          label={refreshing ? "Refreshing..." : "Refresh metrics"}
-          onClick={refreshMetrics}
-          title="Get the latest TikTok stats (rate-limited)."
-          disabled={refreshing}
-        />
-        <ActionButton
-          label={showManualMapping ? "Hide manual mapping" : "Manual mark as posted"}
-          variant="ghost"
-          onClick={() => setShowManualMapping(!showManualMapping)}
-          title="Link a TikTok video to a plan."
-        />
-      </section>
+    <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+      <PageHeader
+        title="Learn"
+        description="See what’s working and what to try next."
+        actions={
+          <div style={{ display: "flex", gap: 12 }}>
+            <ActionButton
+              label={refreshing ? "Refreshing..." : "Refresh metrics"}
+              onClick={refreshMetrics}
+              title="Get the latest TikTok stats."
+              disabled={refreshing}
+            />
+            <ActionButton
+              label={showManualMapping ? "Hide manual mapping" : "Manual mark as posted"}
+              variant="ghost"
+              onClick={() => setShowManualMapping(!showManualMapping)}
+              title="Link a TikTok video to a plan."
+            />
+            <ActionButton
+              label={showDetails ? "Hide details" : "Show details"}
+              variant="ghost"
+              onClick={() => setShowDetails(!showDetails)}
+            />
+          </div>
+        }
+      />
+
       {error && (
-        <div style={{ padding: 20, borderRadius: 16, border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: 14, color: '#dc2626' }}>
+        <div style={{ padding: 16, borderRadius: 12, border: "1px solid #fecaca", backgroundColor: "#fef2f2", color: "#dc2626" }}>
           {error}
         </div>
       )}
-
       {message && !error && (
-        <div style={{ padding: 20, borderRadius: 16, border: '1px solid #a7f3d0', backgroundColor: '#f0fdf4', fontSize: 14, color: '#059669' }}>
+        <div style={{ padding: 16, borderRadius: 12, border: "1px solid #a7f3d0", backgroundColor: "#f0fdf4", color: "#059669" }}>
           {message}
         </div>
       )}
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+      {!hasResults && (
+        <div style={{ padding: 16, borderRadius: 12, border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#475569" }}>
+          No results yet. Post on TikTok, then refresh metrics here.
+        </div>
+      )}
+
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
         <StatCard title="Views" value={summary ? String(summary.totals.views) : "—"} />
         <StatCard title="Likes" value={summary ? String(summary.totals.likes) : "—"} />
-        <StatCard
-          title="Comments"
-          value={summary ? String(summary.totals.comments) : "—"}
-        />
+        <StatCard title="Comments" value={summary ? String(summary.totals.comments) : "—"} />
         <StatCard title="Shares" value={summary ? String(summary.totals.shares) : "—"} />
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
-        <div style={cardStyle}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Coverage</h2>
-          <div style={{ fontSize: 16, color: '#475569', lineHeight: 1.6 }}>
-            {summary ? (
-              <>
-                <div>Active recipes: {summary.coverage.activeRecipes}</div>
-                <div>Required recipes: {summary.coverage.requiredRecipes}</div>
-                <div>Shortfall: {summary.coverage.shortfall}</div>
-                <div>Cadence: {summary.coverage.cadencePerDay}/day</div>
-                <div>Cooldown: {summary.coverage.cooldownDays} days</div>
-              </>
-            ) : (
-              <div>No coverage data yet.</div>
-            )}
-          </div>
-        </div>
-
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 24 }}>
         <LeaderboardCard
-          title="Recipe Leaderboard"
+          title="Top hooks"
           rows={(summary?.recipeLeaderboard ?? []).map((row) => ({
             label: row.recipe,
             score: row.score,
             count: row.count
           }))}
+          emptyText="No hook performance yet."
         />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
         <LeaderboardCard
-          title="Container Performance"
+          title="Top containers"
           rows={(summary?.containerLeaderboard ?? []).map((row) => ({
             label: row.container,
             score: row.score,
             count: row.count
           }))}
+          emptyText="No container data yet."
         />
-        <LeaderboardCard
-          title="Snippet Strategy"
-          rows={(summary?.snippetLeaderboard ?? []).map((row) => ({
-            label: row.snippetStrategy,
-            score: row.score,
-            count: row.count
-          }))}
-        />
-      </div>
+      </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
-        <LeaderboardCard
-          title="Clip Category"
-          rows={(summary?.clipCategoryLeaderboard ?? []).map((row) => ({
-            label: row.clipCategory,
-            score: row.score,
-            count: row.count
-          }))}
-        />
-        <LeaderboardCard
-          title="Recipe + Container"
-          rows={(summary?.pairingLeaderboard ?? []).map((row) => ({
-            label: row.pairing,
-            score: row.score,
-            count: row.count
-          }))}
-        />
-      </div>
+      <section style={cardStyle}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>Coverage</div>
+        <div style={{ color: "#64748b" }}>
+          {summary ? (
+            <>
+              {summary.coverage.shortfall > 0
+                ? `You need ${summary.coverage.shortfall} more active hooks for ${summary.coverage.cadencePerDay}/day.`
+                : "Your hook library is on track for the week."}
+            </>
+          ) : (
+            "No coverage data yet."
+          )}
+        </div>
+      </section>
 
-      <RecipeSuggestions />
-
-      {showManualMapping && (
-        <section style={cardStyle}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>Manual Post Mapping</h2>
-          <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 40 }}>
-            <label style={{ fontSize: 14, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Select post plan
-              <select
-                style={inputStyle}
-                value={selectedPlan}
-                onChange={(event) => setSelectedPlan(event.target.value)}
-              >
-                <option value="">Select a plan...</option>
-                {plans.length === 0 ? (
-                  <option value="" disabled>No plans available</option>
-                ) : (
-                  plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.caption} ({plan.status})
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <label style={{ fontSize: 14, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              TikTok video id (optional)
-              <input
-                style={inputStyle}
-                value={videoId}
-                onChange={(event) => setVideoId(event.target.value)}
-                placeholder="Optional"
-              />
-            </label>
-          </div>
-          <div style={{ marginTop: 32 }}>
-            <ActionButton 
-              label="Mark as posted" 
-              onClick={markPosted}
-              disabled={!selectedPlan}
+      {showDetails && (
+        <>
+          <section style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 24 }}>
+            <LeaderboardCard
+              title="Snippet strategies"
+              rows={(summary?.snippetLeaderboard ?? []).map((row) => ({
+                label: row.snippetStrategy,
+                score: row.score,
+                count: row.count
+              }))}
+              emptyText="No snippet data yet."
             />
-          </div>
-        </section>
+            <LeaderboardCard
+              title="Clip categories"
+              rows={(summary?.clipCategoryLeaderboard ?? []).map((row) => ({
+                label: row.clipCategory,
+                score: row.score,
+                count: row.count
+              }))}
+              emptyText="No clip category data yet."
+            />
+          </section>
+
+          <LeaderboardCard
+            title="Hook + snippet pairings"
+            rows={(summary?.pairingLeaderboard ?? []).map((row) => ({
+              label: row.pairing,
+              score: row.score,
+              count: row.count
+            }))}
+            emptyText="No pairing data yet."
+          />
+
+          <RecipeSuggestions />
+        </>
       )}
 
-      
+      {showManualMapping && (
+        <ManualMappingCard
+          plans={plans}
+          selectedPlan={selectedPlan}
+          videoId={videoId}
+          onSelectPlan={setSelectedPlan}
+          onVideoIdChange={setVideoId}
+          onMark={markPosted}
+        />
+      )}
     </div>
   );
 }

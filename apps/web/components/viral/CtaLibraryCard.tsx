@@ -47,6 +47,9 @@ export default function CtaLibraryCard({ ctas, onChange, onSave }: CtaLibraryCar
         </div>
         <ActionButton label="Save CTAs" onClick={onSave} />
       </div>
+      <div style={{ fontSize: 14, color: "#64748b" }}>
+        Turn CTAs on/off and lock the ones you never want changed.
+      </div>
       {ctas.length === 0 ? (
         <div style={{ fontSize: 14, color: "#94a3b8" }}>No CTAs yet.</div>
       ) : (

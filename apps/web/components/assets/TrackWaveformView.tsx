@@ -18,11 +18,13 @@ export type TrackWaveformViewProps = {
   playheadRatio: number | null;
   isPlaying: boolean;
   regionCount: number;
+  section: string;
   saveMessage: string | null;
   saveError: string | null;
   onPlaySelection: () => void;
   onSaveSnippet: () => void;
   onClearSelection: () => void;
+  onSectionChange: (value: string) => void;
 };
 
 export default function TrackWaveformView({
@@ -34,17 +36,19 @@ export default function TrackWaveformView({
   playheadRatio,
   isPlaying,
   regionCount,
+  section,
   saveMessage,
   saveError,
   onPlaySelection,
   onSaveSnippet,
-  onClearSelection
+  onClearSelection,
+  onSectionChange
 }: TrackWaveformViewProps) {
   return (
     <div className="mt-8 rounded-2xl bg-white px-5 py-5" style={{ position: "relative" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Manual snippet picker</div>
       <div style={{ marginTop: 6, fontSize: 13, color: "#94a3b8" }}>
-        Drag across the wave to pick a section, then save it.
+        Drag across the wave to pick a moment, then tag the section before saving.
       </div>
       <div className="mt-4" style={{ position: "relative" }}>
         <div
@@ -127,6 +131,24 @@ export default function TrackWaveformView({
           variant="outline"
           onClick={onPlaySelection}
         />
+        <select
+          value={section}
+          onChange={(event) => onSectionChange(event.target.value)}
+          style={{
+            borderRadius: 10,
+            border: "1px solid #e2e8f0",
+            background: "#ffffff",
+            padding: "8px 10px",
+            fontSize: 13,
+            color: "#0f172a"
+          }}
+        >
+          <option value="unset">Section: unset</option>
+          <option value="calm">Section: calm (no drums)</option>
+          <option value="build">Section: build (rising)</option>
+          <option value="peak">Section: peak (drums)</option>
+          <option value="neutral">Section: neutral</option>
+        </select>
         <ActionButton label="Save snippet" onClick={onSaveSnippet} />
         <ActionButton
           label="Clear"

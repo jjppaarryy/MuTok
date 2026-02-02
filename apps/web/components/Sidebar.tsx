@@ -6,35 +6,46 @@ import { useState } from "react";
 import {
   Activity,
   BarChart3,
+  ClipboardList,
   Cpu,
   FileText,
-  FolderOpen,
   Gauge,
   LayoutDashboard,
   ListChecks,
+  Menu,
   PlugZap,
   TrendingUp
 } from "lucide-react";
 
-const navItems = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Connect TikTok", href: "/connect", icon: PlugZap },
-  { label: "Asset Bank", href: "/assets", icon: FolderOpen },
-  { label: "Guardrails", href: "/rules", icon: ListChecks },
-  { label: "Recipes", href: "/recipes", icon: FileText },
-  { label: "Optimisation Policy", href: "/viral", icon: Activity },
-  { label: "Optimiser", href: "/optimizer", icon: TrendingUp },
-  { label: "Queue", href: "/queue", icon: Gauge },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
-  { label: "Run Logs", href: "/logs", icon: FileText },
-  { label: "System Status", href: "/status", icon: Cpu }
+const navSections = [
+  {
+    title: "Core",
+    items: [
+      { label: "Daily Studio", href: "/", icon: LayoutDashboard },
+      { label: "Setup", href: "/setup", icon: PlugZap },
+      { label: "Hooks", href: "/recipes", icon: FileText },
+      { label: "Plan", href: "/plan", icon: ClipboardList },
+      { label: "Queue", href: "/queue", icon: Gauge },
+      { label: "Learn", href: "/analytics", icon: BarChart3 }
+    ]
+  },
+  {
+    title: "Advanced",
+    items: [
+      { label: "Safety & Schedule", href: "/rules", icon: ListChecks },
+      { label: "Testing", href: "/viral", icon: TrendingUp },
+      { label: "Performance Overview", href: "/optimizer", icon: Activity },
+      { label: "Run Logs", href: "/logs", icon: FileText },
+      { label: "System", href: "/status", icon: Cpu }
+    ]
+  }
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const styles = {
-    aside: { width: 280, padding: "32px 24px" },
+    aside: { width: 280, padding: "32px 24px", minHeight: "100vh", overflowY: "auto" },
     header: { marginBottom: 32 },
     brandRow: { display: "flex", alignItems: "center", gap: 16 },
     brandIcon: { width: 48, height: 48, borderRadius: 16 },
@@ -44,7 +55,16 @@ export default function Sidebar() {
     envRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
     envLabel: { fontSize: 14, fontWeight: 500 },
     envPill: { padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600 },
-    nav: { display: "flex", flexDirection: "column", gap: 8, flex: 1 },
+    nav: { display: "flex", flexDirection: "column", gap: 16, flex: 1 },
+    navGroup: { display: "flex", flexDirection: "column", gap: 8 },
+    navTitle: {
+      fontSize: 12,
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      color: "#94a3b8",
+      padding: "0 8px"
+    },
     navLink: {
       display: "flex",
       alignItems: "center",
@@ -55,6 +75,13 @@ export default function Sidebar() {
       fontWeight: 600,
       transition: "all 0.15s"
     },
+    navLinkActive: {
+      backgroundColor: "#0f172a",
+      color: "white"
+    },
+    navLinkInactive: {
+      color: "#475569"
+    },
     footer: { paddingTop: 24, fontSize: 13 },
     footerRow: { display: "flex", alignItems: "center", gap: 10 },
     footerText: { fontWeight: 500 }
@@ -64,11 +91,12 @@ export default function Sidebar() {
     <>
       <div style={styles.header}>
         <div style={styles.brandRow}>
-          <div
-            style={styles.brandIcon}
-            className="grid place-items-center bg-slate-900"
-          >
-            <span style={styles.brandName} className="text-white">M</span>
+          <div style={styles.brandIcon}>
+            <img
+              src="/icon.png"
+              alt="MuTok"
+              style={{ width: "100%", height: "100%", borderRadius: 16, display: "block" }}
+            />
           </div>
           <div>
             <div style={styles.brandName} className="text-slate-900">
@@ -95,23 +123,31 @@ export default function Sidebar() {
       </div>
 
       <nav style={styles.nav}>
-        {navItems.map((item) => {
-          const active = pathname === item.href;
-          const Icon = item.icon;
+        {navSections.map((section) => (
+          <div key={section.title} style={styles.navGroup}>
+            <div style={styles.navTitle}>{section.title}</div>
+            {section.items.map((item) => {
+              const active = pathname === item.href;
+              const Icon = item.icon;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={styles.navLink}
-              className={active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}
-              onClick={() => setIsOpen(false)}
-            >
-              <Icon size={22} className={active ? "text-white" : "text-slate-400"} />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    ...styles.navLink,
+                    ...(active ? styles.navLinkActive : styles.navLinkInactive)
+                  }}
+                  className={active ? "" : "hover:bg-slate-100"}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Icon size={22} className={active ? "text-white" : "text-slate-400"} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div style={styles.footer} className="text-slate-400">
@@ -131,9 +167,7 @@ export default function Sidebar() {
         aria-label="Open navigation"
         onClick={() => setIsOpen(true)}
       >
-        <span />
-        <span />
-        <span />
+        <Menu size={22} />
       </button>
 
       <div
@@ -143,7 +177,7 @@ export default function Sidebar() {
 
       <aside
         style={styles.aside}
-        className="sidebar-desktop sticky top-0 flex h-screen shrink-0 flex-col border-r border-slate-200 bg-white"
+        className="sidebar-desktop flex shrink-0 flex-col border-r border-slate-200 bg-white"
       >
         {navContent}
       </aside>

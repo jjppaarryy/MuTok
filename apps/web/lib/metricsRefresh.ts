@@ -20,9 +20,19 @@ type MetricsResponse = {
   };
 };
 
+type PublishStatusResponse = {
+  data?: Record<string, unknown>;
+};
+
 type RefreshResult = {
   matched: number;
   results: Array<{ planId: string; videoId: string }>;
+  debug?: {
+    publishPlans: number;
+    publishResolved: number;
+    listVideos: number;
+    listMatches: number;
+  };
 };
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
@@ -44,6 +54,22 @@ const toRate = (value: number, views: number) => {
   return value / views;
 };
 
+const extractVideoIdFromPublishStatus = (payload: PublishStatusResponse): string | null => {
+  const data = payload.data ?? {};
+  const candidates = [
+    data.video_id,
+    (data.video as Record<string, unknown> | undefined)?.["id"],
+    (data.video as Record<string, unknown> | undefined)?.["video_id"],
+    (data.publish_status as Record<string, unknown> | undefined)?.["video_id"],
+    (data.status as Record<string, unknown> | undefined)?.["video_id"],
+    (data.share as Record<string, unknown> | undefined)?.["video_id"]
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return null;
+};
+
 export async function runMetricsRefresh(): Promise<RefreshResult> {
   const accessToken = await getValidAccessToken();
   if (!accessToken) {
@@ -57,9 +83,31 @@ export async function runMetricsRefresh(): Promise<RefreshResult> {
     sandbox: settings.sandbox
   });
 
+  const publishPlans = await prisma.postPlan.findMany({
+    where: { status: { in: ["UPLOADED_DRAFT", "POSTED", "METRICS_FETCHED"] }, tiktokPublishId: { not: null } },
+    select: { id: true, tiktokPublishId: true }
+  });
+  const publishMatches: Array<{ planId: string; videoId: string }> = [];
+  for (const plan of publishPlans) {
+    if (!plan.tiktokPublishId) continue;
+    try {
+      const statusResponse = (await client.getPublishStatus(plan.tiktokPublishId)) as PublishStatusResponse;
+      const videoId = extractVideoIdFromPublishStatus(statusResponse);
+      if (videoId) {
+        publishMatches.push({ planId: plan.id, videoId });
+      }
+    } catch {
+      // Ignore per-plan status failures and fall back to list matching
+    }
+  }
+
   const response = (await client.queryVideoList({ max_count: 20 })) as VideoListResponse;
   const videos = (response.data?.videos ?? response.data?.video_list ?? []) as TikTokVideo[];
-  const matches = await matchVideosToPlans(videos);
+  const listMatches = await matchVideosToPlans(videos);
+  const matchedMap = new Map<string, string>();
+  publishMatches.forEach((match) => matchedMap.set(match.planId, match.videoId));
+  listMatches.forEach((match) => matchedMap.set(match.planId, match.videoId));
+  const matches = Array.from(matchedMap.entries()).map(([planId, videoId]) => ({ planId, videoId }));
 
   const results: Array<{ planId: string; videoId: string }> = [];
   for (const match of matches) {
@@ -139,5 +187,14 @@ export async function runMetricsRefresh(): Promise<RefreshResult> {
     results.push({ planId: match.planId, videoId: match.videoId });
   }
 
-  return { matched: results.length, results };
+  return {
+    matched: results.length,
+    results,
+    debug: {
+      publishPlans: publishPlans.length,
+      publishResolved: publishMatches.length,
+      listVideos: videos.length,
+      listMatches: listMatches.length
+    }
+  };
 }

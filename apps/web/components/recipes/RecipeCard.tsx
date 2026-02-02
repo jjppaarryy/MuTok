@@ -1,5 +1,5 @@
 import ActionButton from "../ActionButton";
-import { CTA_OPTIONS, RecipeForm, SNIPPET_OPTIONS } from "./recipeTypes";
+import { CTA_LABELS, CTA_OPTIONS, RecipeForm, SNIPPET_LABELS, SNIPPET_OPTIONS } from "./recipeTypes";
 
 type RecipeCardProps = {
   recipe: RecipeForm;
@@ -71,17 +71,17 @@ export default function RecipeCard({
             </div>
           ) : null}
           {isRetireCandidate ? (
-            <div style={{ color: "#b91c1c", fontWeight: 700 }}>Recommend archive</div>
+            <div style={{ color: "#b91c1c", fontWeight: 700 }}>Retire suggested</div>
           ) : null}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <input
           style={{ ...inputStyle, fontSize: 16 }}
           value={recipe.name}
           onChange={(event) => onChange(recipe.id, { name: event.target.value })}
         />
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="wrap-actions">
           <ActionButton label="Save" onClick={() => onSave(recipe)} />
           <ActionButton label="Duplicate" variant="secondary" onClick={() => onDuplicate(recipe)} />
           <ActionButton
@@ -92,9 +92,12 @@ export default function RecipeCard({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+      <div className="grid-2">
         <label style={labelStyle}>
-          Beat 1 text
+          Beat 1
+          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 500, textTransform: "none" }}>
+            First line. Keep it punchy.
+          </div>
           <textarea
             style={{ ...inputStyle, minHeight: 80 }}
             value={recipe.beat1Text}
@@ -102,7 +105,10 @@ export default function RecipeCard({
           />
         </label>
         <label style={labelStyle}>
-          Beat 2 text
+          Beat 2
+          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 500, textTransform: "none" }}>
+            Second line. Add tension or curiosity.
+          </div>
           <textarea
             style={{ ...inputStyle, minHeight: 80 }}
             value={recipe.beat2Text}
@@ -112,7 +118,10 @@ export default function RecipeCard({
       </div>
 
       <label style={labelStyle}>
-        Caption text
+        Caption
+        <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 500, textTransform: "none" }}>
+          This becomes the TikTok caption. Keep it simple and on-brand.
+        </div>
         <textarea
           style={{ ...inputStyle, minHeight: 80 }}
           value={recipe.captionText}
@@ -120,7 +129,7 @@ export default function RecipeCard({
         />
       </label>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+      <div className="grid-3">
         <label style={labelStyle}>
           CTA intent
           <select
@@ -129,7 +138,9 @@ export default function RecipeCard({
             onChange={(event) => onChange(recipe.id, { ctaType: event.target.value })}
           >
             {CTA_OPTIONS.map((cta) => (
-              <option key={cta} value={cta}>{cta}</option>
+              <option key={cta} value={cta}>
+                {CTA_LABELS[cta] ?? cta}
+              </option>
             ))}
           </select>
         </label>
@@ -149,7 +160,7 @@ export default function RecipeCard({
         </label>
         <label style={labelStyle}>
           Snippet strategy
-          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
             {SNIPPET_OPTIONS.map((option) => (
               <label key={option} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
@@ -162,7 +173,7 @@ export default function RecipeCard({
                     onChange(recipe.id, { allowedSnippetTypes: next });
                   }}
                 />
-                {option.replace("_", " ")}
+                {SNIPPET_LABELS[option] ?? option}
               </label>
             ))}
           </div>

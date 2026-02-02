@@ -1,3 +1,5 @@
+import { CTA_LABELS, CTA_OPTIONS } from "../recipes/recipeTypes";
+
 type HookRecipe = {
   id: string;
   name: string;
@@ -22,8 +24,11 @@ type HookRecipesEditorProps = {
   onChange: (recipes: HookRecipe[]) => void;
 };
 
-const ctaOptions = ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "PICK_AB"];
 const snippetTypes = ["moment_3_7", "moment_7_11"];
+const snippetTypeLabels: Record<string, string> = {
+  moment_3_7: "Early hook in snippet",
+  moment_7_11: "Second hook in snippet"
+};
 const containers = ["static_daw", "montage"];
 
 const cardStyle: React.CSSProperties = {
@@ -77,7 +82,7 @@ export default function HookRecipesEditor({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-      <h2 style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>Recipe Library</h2>
+      <h2 style={{ fontSize: 32, fontWeight: 800, color: '#0f172a' }}>Hook Library</h2>
 
       {recipes.length === 0 ? (
         <div style={{ fontSize: 16, color: '#64748b' }}>Loading hook recipes…</div>
@@ -117,7 +122,7 @@ export default function HookRecipesEditor({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
+              <div className="grid-2" style={{ gap: 32 }}>
                 <label style={labelStyle}>
                   Beat 1 templates (one per line)
                   <textarea
@@ -150,7 +155,7 @@ export default function HookRecipesEditor({
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
+              <div className="grid-3" style={{ gap: 32 }}>
                 <label style={labelStyle}>
                   CTA type
                   <select
@@ -160,9 +165,9 @@ export default function HookRecipesEditor({
                       updateRecipe(recipe.id, { ctaType: event.target.value })
                     }
                   >
-                    {ctaOptions.map((cta) => (
+                    {CTA_OPTIONS.map((cta) => (
                       <option key={cta} value={cta}>
-                        {cta}
+                        {CTA_LABELS[cta] ?? cta}
                       </option>
                     ))}
                   </select>
@@ -185,7 +190,7 @@ export default function HookRecipesEditor({
                           }
                           style={{ width: 20, height: 20, borderRadius: 4, accentColor: '#fe2c55' }}
                         />
-                        {type}
+                        {snippetTypeLabels[type] ?? type}
                       </label>
                     ))}
                   </div>

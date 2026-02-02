@@ -40,18 +40,21 @@ type ArmTableProps = {
 export default function ArmTable({ title, rows }: ArmTableProps) {
   return (
     <section style={{ padding: 32, borderRadius: 24, border: "1px solid #e2e8f0", background: "white" }}>
-      <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16 }}>{title}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+        Tests = how many times it was used. Performance = average score.
+      </div>
       {rows.length === 0 ? (
-        <div style={{ fontSize: 14, color: "#94a3b8" }}>No arms yet.</div>
+        <div style={{ fontSize: 14, color: "#94a3b8" }}>No results yet for this group.</div>
       ) : (
         <table style={tableStyle}>
           <thead>
             <tr>
-              <th style={headerStyle}>Name</th>
+              <th style={headerStyle}>Item</th>
               <th style={headerStyle}>Status</th>
-              <th style={headerStyle}>Pulls</th>
+              <th style={headerStyle}>Tests</th>
               <th style={headerStyle}>Views</th>
-              <th style={headerStyle}>Mean reward</th>
+              <th style={headerStyle}>Performance</th>
               <th style={headerStyle}>Confidence</th>
               <th style={headerStyle}>Last used</th>
             </tr>

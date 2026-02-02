@@ -13,14 +13,14 @@ type RootLayoutProps = {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   const styles = {
-    shell: { padding: 40, minHeight: "100vh" },
+    shell: { padding: "var(--app-shell-padding)", minHeight: "100vh" },
     frame: {
-      borderRadius: 36,
-      minHeight: "calc(100vh - 80px)",
+      borderRadius: "var(--app-frame-radius)",
+      minHeight: "100vh",
       overflow: "hidden"
     },
     main: {
-      padding: "48px 56px",
+      padding: "var(--app-main-padding)",
       flex: 1,
       minWidth: 0,
       overflowY: "auto"

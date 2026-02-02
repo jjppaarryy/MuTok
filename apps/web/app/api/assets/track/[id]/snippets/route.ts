@@ -26,6 +26,7 @@ export async function POST(
       durationSec?: number;
       replaceExisting?: boolean;
       startSec?: number;
+      section?: string | null;
     };
 
     if (typeof body.startSec === "number" && typeof body.durationSec === "number") {
@@ -89,6 +90,7 @@ export async function POST(
           startSec: body.startSec,
           durationSec: body.durationSec,
           energyScore,
+          section: typeof body.section === "string" ? body.section : null,
           moment3to7: moment3Energy ? hasMoment(moment3Energy.meanDb, moment3Energy.maxDb) : false,
           moment7to11: moment7Energy ? hasMoment(moment7Energy.meanDb, moment7Energy.maxDb) : false,
           approved: true

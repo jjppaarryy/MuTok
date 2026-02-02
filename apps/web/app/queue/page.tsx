@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import ActionButton from "../../components/ActionButton";
-import InlineTip from "../../components/InlineTip";
 import PageHeader from "../../components/PageHeader";
 import QueuePlanCard, { QueuePlan } from "../../components/queue/QueuePlanCard";
 
@@ -46,29 +45,6 @@ export default function QueuePage() {
   useEffect(() => {
     void refresh();
   }, []);
-
-  const handleTopUp = async () => {
-    setMessage(null);
-    setBatchLoading(true);
-    const response = await fetch("/api/queue/topup", { method: "POST" });
-    const rawText = await response.text();
-    const data = (rawText ? JSON.parse(rawText) : {}) as {
-      warnings?: string[];
-      created?: string[];
-      warning?: string;
-    };
-    if (!response.ok) {
-      setMessage(data.warning ?? "Top up failed.");
-    } else if (data.warning) {
-      setMessage(data.warning);
-    } else if (data.warnings?.length) {
-      setMessage(`Top up finished with ${data.warnings.length} warnings.`);
-    } else {
-      setMessage("Top up complete.");
-    }
-    setBatchLoading(false);
-    await refresh();
-  };
 
   const handleRenderPending = async () => {
     setMessage(null);
@@ -231,18 +207,12 @@ export default function QueuePage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
       <PageHeader
         title="Queue"
-        description="Plans, renders, and draft uploads live here."
-        tip="Step 4: generate, render, then upload drafts."
+        description="Ready-to-post drafts. Render, upload, and publish from here."
+        tip="Step 4: render and upload drafts."
         actions={
           <div style={{ display: 'flex', gap: 16 }}>
             <ActionButton
-              label={batchLoading ? "Working..." : "Top up"}
-              onClick={handleTopUp}
-              disabled={batchLoading}
-              title="Make new plans."
-            />
-            <ActionButton
-              label={batchLoading ? "Working..." : "Render pending"}
+              label={batchLoading ? "Working..." : "Render drafts"}
               variant="secondary"
               onClick={handleRenderPending}
               disabled={batchLoading}
@@ -253,8 +223,7 @@ export default function QueuePage() {
       />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#64748b" }}>
-        Top up → Render → Upload drafts.
-        <InlineTip text="Uploads pause if TikTok pending shares hit the 5-per-24h cap." />
+        Use Plan to generate more drafts when the queue gets low. Uploads pause if TikTok hits its draft cap.
       </div>
 
       {message ? (
@@ -265,18 +234,18 @@ export default function QueuePage() {
 
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
         <div style={{ padding: '16px 32px', borderRadius: 16, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Drafts queued</span>
+          <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Drafts ready</span>
           <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a' }}>{draftCount}</div>
         </div>
         <div style={{ padding: '16px 32px', borderRadius: 16, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Pending shares</span>
+          <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Drafts on TikTok</span>
           <div style={{ fontSize: 28, fontWeight: 800, color: '#0f172a' }}>{pendingCount}</div>
         </div>
       </div>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {plans.length === 0 ? (
-          <div style={emptyCardStyle}>No plans generated yet.</div>
+          <div style={emptyCardStyle}>No drafts yet. Generate drafts on the Plan page.</div>
         ) : (
           plans.map((post) => (
             <QueuePlanCard

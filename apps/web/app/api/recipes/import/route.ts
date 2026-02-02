@@ -18,33 +18,46 @@ const resolveDisallowedContainers = (allowed?: ImportRecipe["containerAllowed"])
 };
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { recipes?: ImportRecipe[] };
-  const recipes = body.recipes ?? [];
-  if (recipes.length === 0) {
-    return NextResponse.json({ error: "No recipes provided" }, { status: 400 });
-  }
-
-  const created: string[] = [];
-  for (const recipe of recipes) {
-    if (!recipe.name || !recipe.beat1Text || !recipe.beat2Text) {
-      continue;
+  try {
+    const body = (await request.json()) as { recipes?: ImportRecipe[] };
+    const recipes = body.recipes ?? [];
+    if (recipes.length === 0) {
+      return NextResponse.json({ error: "No recipes provided" }, { status: 400 });
     }
-    const row = await prisma.hookRecipe.create({
-      data: {
-        name: recipe.name.trim(),
-        enabled: recipe.enabled ?? true,
-        locked: false,
-        beat1Templates: [recipe.beat1Text.trim()],
-        beat2Templates: [recipe.beat2Text.trim()],
-        captionTemplate: recipe.captionText?.trim() ?? null,
-        ctaType: recipe.ctaType ?? "KEEP_SKIP",
-        allowedSnippetTypes: recipe.allowedSnippetTypes ?? [],
-        disallowedContainers: resolveDisallowedContainers(recipe.containerAllowed),
-        source: "import"
-      }
-    });
-    created.push(row.id);
-  }
 
-  return NextResponse.json({ created });
+    const created: string[] = [];
+    const skipped: string[] = [];
+    for (const recipe of recipes) {
+      if (!recipe.name || !recipe.beat1Text || !recipe.beat2Text) {
+        skipped.push(recipe.name ?? "Unknown");
+        continue;
+      }
+      const name = recipe.name.trim();
+      const existing = await prisma.hookRecipe.findUnique({ where: { name } });
+      if (existing) {
+        skipped.push(name);
+        continue;
+      }
+      const row = await prisma.hookRecipe.create({
+        data: {
+          name,
+          enabled: recipe.enabled ?? true,
+          locked: false,
+          beat1Templates: [recipe.beat1Text.trim()],
+          beat2Templates: [recipe.beat2Text.trim()],
+          captionTemplate: recipe.captionText?.trim() ?? null,
+          ctaType: recipe.ctaType ?? "KEEP_SKIP",
+          allowedSnippetTypes: recipe.allowedSnippetTypes ?? [],
+          disallowedContainers: resolveDisallowedContainers(recipe.containerAllowed),
+          source: "import"
+        }
+      });
+      created.push(row.id);
+    }
+
+    return NextResponse.json({ created, skipped });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Import failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

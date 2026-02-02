@@ -3,7 +3,12 @@ import TrackWaveformView from "./TrackWaveformView";
 
 type TrackWaveformProps = {
   trackId: string;
-  onAddSnippet: (trackId: string, startSec: number, durationSec: number) => Promise<void>;
+  onAddSnippet: (
+    trackId: string,
+    startSec: number,
+    durationSec: number,
+    section: string | null
+  ) => Promise<void>;
 };
 
 type WaveRegion = {
@@ -46,6 +51,7 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
   const [pendingPlay, setPendingPlay] = useState<{ start: number; end: number } | null>(null);
   const [playheadRatio, setPlayheadRatio] = useState<number | null>(null);
   const [waveKey, setWaveKey] = useState<number>(0);
+  const [section, setSection] = useState<string>("unset");
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const regionsRef = useRef<RegionsApi | null>(null);
   const waveRef = useRef<WaveSurferInstance | null>(null);
@@ -259,12 +265,13 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
     const duration = Math.max(1, end - start);
     try {
-      await onAddSnippet(trackId, start, duration);
+      await onAddSnippet(trackId, start, duration, section === "unset" ? null : section);
       regionsRef.current?.clearRegions?.();
       setSelection(null);
       setRegionCount(0);
       activeRegionRef.current = null;
       setSelectionDuration(null);
+      setSection("unset");
       setSaveMessage("Snippet saved.");
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Save failed.");
@@ -282,6 +289,7 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
     setPlayheadRatio(null);
     setSaveMessage(null);
     setSaveError(null);
+    setSection("unset");
     setWaveKey((prev) => prev + 1);
   };
 
@@ -295,11 +303,13 @@ export default function TrackWaveform({ trackId, onAddSnippet }: TrackWaveformPr
       playheadRatio={playheadRatio}
       isPlaying={isPlaying}
       regionCount={regionCount}
+      section={section}
       saveMessage={saveMessage}
       saveError={saveError}
       onPlaySelection={handlePlaySelection}
       onSaveSnippet={handleSaveSnippet}
       onClearSelection={handleClearSelection}
+      onSectionChange={setSection}
     />
   );
 }

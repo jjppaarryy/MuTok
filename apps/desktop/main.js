@@ -122,13 +122,16 @@ async function startServerIfNeeded() {
 }
 
 async function createWindow() {
+  const root = getAppRoot();
+  const iconPath = path.join(root, "apps", "web", "app", "icon.png");
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     backgroundColor: "#f6f7f9",
     show: true,
     title: "MuTok",
-    titleBarStyle: "hiddenInset",
+    titleBarStyle: "default",
+    icon: iconPath,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false

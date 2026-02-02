@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import PageHeader from "../../components/PageHeader";
 
 type RunLog = {
   id: string;
@@ -35,6 +36,11 @@ const statusBadgeStyle = (status: string): React.CSSProperties => ({
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<RunLog[]>([]);
+  const summary = useMemo(() => {
+    const success = logs.filter((log) => log.status === "SUCCESS").length;
+    const failed = logs.filter((log) => log.status !== "SUCCESS").length;
+    return { success, failed };
+  }, [logs]);
 
   const loadLogs = async () => {
     const response = await fetch("/api/logs");
@@ -48,17 +54,31 @@ export default function LogsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-      <header>
-        <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, marginBottom: 12, color: '#0f172a' }}>Run Logs</h1>
-        <p style={{ fontSize: 17, color: '#64748b' }}>
-          Recent task runs, errors, and debug payloads.
-        </p>
-      </header>
+      <PageHeader
+        title="Run Logs"
+        description="History of background tasks like planning, rendering, uploads, and checks."
+        tip="Use this to understand what ran and why it failed."
+      />
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ padding: "12px 18px", borderRadius: 14, border: "1px solid #e2e8f0", background: "white" }}>
+          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
+            Success
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>{summary.success}</div>
+        </div>
+        <div style={{ padding: "12px 18px", borderRadius: 14, border: "1px solid #e2e8f0", background: "white" }}>
+          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
+            Failed
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>{summary.failed}</div>
+        </div>
+      </div>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {logs.length === 0 ? (
           <div style={{ ...cardStyle, fontSize: 16, color: '#94a3b8', textAlign: 'center' }}>
-            No logs available yet.
+            No runs yet. Logs will appear after plans, renders, or uploads.
           </div>
         ) : (
           logs.map((log) => (

@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import ArmTable from "../../components/optimizer/ArmTable";
+import PageHeader from "../../components/PageHeader";
+import OptimizerActions from "../../components/optimizer/OptimizerActions";
+import OptimizerCharts from "../../components/optimizer/OptimizerCharts";
+import OptimizerInsights from "../../components/optimizer/OptimizerInsights";
+import OptimizerLeaders from "../../components/optimizer/OptimizerLeaders";
+import OptimizerStats from "../../components/optimizer/OptimizerStats";
+import OptimizerTables from "../../components/optimizer/OptimizerTables";
 
 type ArmRow = {
   id: string;
@@ -41,6 +47,7 @@ export default function OptimizerPage() {
   });
   const [filter, setFilter] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<string>("confidence_adjusted");
+  const [showTables, setShowTables] = useState<boolean>(false);
 
   const load = async () => {
     const response = await fetch("/api/optimizer/arms");
@@ -65,93 +72,121 @@ export default function OptimizerPage() {
   }, [rows, filter, sortBy]);
 
   const byType = (type: string) => filtered.filter((row) => row.armType === type);
+  const typeLabel: Record<string, string> = {
+    RECIPE: "Hooks",
+    CTA: "CTAs",
+    VARIANT: "Variants",
+    CONTAINER: "Containers",
+    CLIP: "Clips",
+    SNIPPET: "Snippets"
+  };
+  const scored = useMemo(() => {
+    return rows
+      .map((row) => ({
+        ...row,
+        score: row.meanReward * row.confidence
+      }))
+      .sort((a, b) => b.score - a.score);
+  }, [rows]);
+  const topWinners = scored.slice(0, 3);
+  const lowPerformers = [...scored].reverse().slice(0, 3);
+  const typeCounts = useMemo(() => {
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      acc[row.armType] = (acc[row.armType] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [rows]);
+  const mixTotal = Object.values(typeCounts).reduce((sum, value) => sum + value, 0);
+  const mixSegments = Object.entries(typeCounts).map(([type, count]) => ({
+    type,
+    label: typeLabel[type] ?? type,
+    count,
+    share: mixTotal > 0 ? count / mixTotal : 0
+  }));
+  const barLeaders = scored.slice(0, 5);
+  const barLaggers = [...scored].reverse().slice(0, 5);
+  const barMax = Math.max(1, ...[...barLeaders, ...barLaggers].map((row) => row.score));
+  const rewardMin = Math.min(0, ...rows.map((row) => row.meanReward));
+  const rewardMax = Math.max(1, ...rows.map((row) => row.meanReward));
+  const rewardSpan = Math.max(1, rewardMax - rewardMin);
+  const showTrend = summary.priorMeanReward !== 0 || summary.recentMeanReward !== 0;
+  const trendPoints = [
+    { label: "Last 30d", value: summary.priorMeanReward },
+    { label: "Last 7d", value: summary.recentMeanReward }
+  ];
+  const trendMin = Math.min(...trendPoints.map((point) => point.value));
+  const trendMax = Math.max(...trendPoints.map((point) => point.value));
+  const trendSpan = Math.max(0.0001, trendMax - trendMin);
+  const stats = [
+    {
+      label: "Exploration (7d)",
+      value: `${(summary.explorationRate * 100).toFixed(0)}%`,
+      help: "Share of picks that were experimental."
+    },
+    {
+      label: "Skipped by rules (7d)",
+      value: `${summary.guardrailsExcluded}`,
+      help: "Items blocked by safety rules/cooldowns."
+    },
+    {
+      label: "Throttle hits (7d)",
+      value: `${summary.throttleHits}`,
+      help: "Times posting was slowed for safety."
+    },
+    {
+      label: "Viral confidence",
+      value: `${Math.round(summary.viralConfidence * 100)}%`,
+      help: "Confidence in current winners."
+    },
+    {
+      label: "Reward uplift",
+      value: `${(summary.uplift * 100).toFixed(1)}%`,
+      help: "Recent performance vs longer-term baseline."
+    },
+    {
+      label: "CTA repairs (7d)",
+      value: `${summary.repairEvents}`,
+      help: "CTA auto-adjustments to meet rules."
+    }
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-      <header>
-        <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, marginBottom: 10, color: "#0f172a" }}>
-          Optimiser Leaderboard
-        </h1>
-        <p style={{ fontSize: 16, color: "#64748b" }}>
-          See learning stability, confidence and which arms are actually winning.
-        </p>
-      </header>
+      <PageHeader
+        title="Performance Overview"
+        description="See what’s winning so you can promote the best performers."
+        tip="Charts first, tables available if you want details."
+      />
 
-      <section style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Exploration rate (7d)
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{(summary.explorationRate * 100).toFixed(0)}%</div>
-        </div>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Guardrail excludes (7d)
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{summary.guardrailsExcluded}</div>
-        </div>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Pending throttles (7d)
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{summary.throttleHits}</div>
-        </div>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Viral confidence
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{Math.round(summary.viralConfidence * 100)}%</div>
-        </div>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            Reward uplift (7d vs 30d)
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{(summary.uplift * 100).toFixed(1)}%</div>
-        </div>
-        <div style={{ padding: "16px 20px", borderRadius: 16, border: "1px solid #e2e8f0", background: "white" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.6 }}>
-            CTA repairs (7d)
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>{summary.repairEvents}</div>
-        </div>
-      </section>
-
-      <section style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-        <label style={{ fontSize: 14, fontWeight: 600, color: "#475569" }}>
-          Filter
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            style={{ marginLeft: 12, padding: "8px 12px", borderRadius: 12, border: "1px solid #e2e8f0" }}
-          >
-            {["ALL", "RECIPE", "CTA", "VARIANT", "CONTAINER", "CLIP", "SNIPPET"].map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 14, fontWeight: 600, color: "#475569" }}>
-          Sort
-          <select
-            value={sortBy}
-            onChange={(event) => setSortBy(event.target.value)}
-            style={{ marginLeft: 12, padding: "8px 12px", borderRadius: 12, border: "1px solid #e2e8f0" }}
-          >
-            <option value="confidence_adjusted">Confidence-adjusted</option>
-            <option value="confidence">Confidence</option>
-            <option value="reward">Mean reward</option>
-            <option value="pulls">Pulls</option>
-          </select>
-        </label>
-      </section>
-
-      {(filter === "ALL"
-        ? ["RECIPE", "CTA", "VARIANT", "CONTAINER", "CLIP", "SNIPPET"]
-        : [filter]
-      ).map((type) => (
-        <ArmTable key={type} title={type} rows={byType(type)} />
-      ))}
+      <OptimizerInsights />
+      <OptimizerStats stats={stats} />
+      <OptimizerCharts
+        barLeaders={barLeaders}
+        barLaggers={barLaggers}
+        barMax={barMax}
+        showTrend={showTrend}
+        trendPoints={trendPoints}
+        trendMin={trendMin}
+        trendSpan={trendSpan}
+        mixTotal={mixTotal}
+        mixSegments={mixSegments}
+        rewardMin={rewardMin}
+        rewardSpan={rewardSpan}
+        scatterRows={rows}
+      />
+      <OptimizerLeaders topWinners={topWinners} lowPerformers={lowPerformers} typeLabel={typeLabel} />
+      <OptimizerActions />
+      <OptimizerTables
+        showTables={showTables}
+        onToggle={() => setShowTables((prev) => !prev)}
+        filter={filter}
+        onFilterChange={setFilter}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        typeLabel={typeLabel}
+        types={filter === "ALL" ? ["RECIPE", "CTA", "VARIANT", "CONTAINER", "CLIP", "SNIPPET"] : [filter]}
+        getRows={byType}
+      />
     </div>
   );
 }

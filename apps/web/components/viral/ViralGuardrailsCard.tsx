@@ -1,4 +1,5 @@
 import ActionButton from "../ActionButton";
+import { CTA_LABELS, CTA_OPTIONS } from "../recipes/recipeTypes";
 
 type ViralSettings = {
   require_two_beats: boolean;
@@ -8,11 +9,26 @@ type ViralSettings = {
   allowed_cta_types: string[];
 };
 
-const ctaOptions = [
-  { id: "KEEP_SKIP", label: "KEEP / SKIP" },
-  { id: "COMMENT_VIBE", label: "Comment vibe" },
-  { id: "FOLLOW_FULL", label: "Follow for full ID" },
-  { id: "PICK_AB", label: "Pick A/B" }
+const ctaOptions = CTA_OPTIONS.map((id) => ({ id, label: CTA_LABELS[id] ?? id }));
+const ctaPresets = [
+  {
+    id: "growth",
+    label: "Growth mode",
+    helper: "Adds follow + comment prompts to your list.",
+    intents: ["FOLLOW_FULL", "COMMENT_VIBE"]
+  },
+  {
+    id: "retention",
+    label: "Retention mode",
+    helper: "Adds save / rewatch hooks to your list.",
+    intents: ["SAVE_REWATCH"]
+  },
+  {
+    id: "conversion",
+    label: "Conversion mode",
+    helper: "Adds link / DM hooks to your list.",
+    intents: ["LINK_DM"]
+  }
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -65,6 +81,7 @@ export default function ViralGuardrailsCard({
           style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#fe2c55" }}
         />
         Two-beat on-screen text required
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Keeps hooks in 2 lines.</span>
       </label>
       <label style={labelStyle}>
         <input
@@ -76,6 +93,7 @@ export default function ViralGuardrailsCard({
           style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#fe2c55" }}
         />
         Montage first cut around 2.5s
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Faster hook engagement.</span>
       </label>
       <label style={labelStyle}>
         <input
@@ -84,7 +102,8 @@ export default function ViralGuardrailsCard({
           onChange={(event) => onUpdate({ require_moment_3_to_7: event.target.checked })}
           style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#fe2c55" }}
         />
-        Snippet must contain a moment at 3–7s
+        Early hook in snippet
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Auto-detected lift around 3–7s.</span>
       </label>
       <label style={labelStyle}>
         <input
@@ -95,9 +114,31 @@ export default function ViralGuardrailsCard({
           }
           style={{ width: 24, height: 24, borderRadius: 6, accentColor: "#fe2c55" }}
         />
-        Snippet must contain a second moment at 7–11s
+        Second hook in snippet
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>Auto-detected lift around 7–11s.</span>
       </label>
       <div style={{ display: "flex", flexDirection: "column", gap: 24, borderTop: "1px solid #f1f5f9", paddingTop: 24 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          CTA presets
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {ctaPresets.map((preset) => (
+            <div key={preset.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <ActionButton
+                label={preset.label}
+                variant="secondary"
+                onClick={() =>
+                  onUpdate({
+                    allowed_cta_types: Array.from(
+                      new Set([...(viral.allowed_cta_types ?? []), ...preset.intents])
+                    )
+                  })
+                }
+              />
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>{preset.helper}</span>
+            </div>
+          ))}
+        </div>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
           Allowed CTA types
         </div>

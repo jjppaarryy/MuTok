@@ -50,7 +50,7 @@ export async function startScheduler(): Promise<{ success: boolean; error?: stri
   try {
     const rules = await getRulesSettings();
 
-    const runWithStatus = async (fn: () => Promise<void>) => {
+    const runWithStatus = async (fn: () => Promise<unknown>) => {
       state.lastRunAt = new Date().toISOString();
       try {
         await fn();

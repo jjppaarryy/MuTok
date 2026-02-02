@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ActionButton from "../../components/ActionButton";
-import InlineTip from "../../components/InlineTip";
+import PageHeader from "../../components/PageHeader";
 
 type EnvStatus = {
   key: string;
@@ -25,6 +25,14 @@ type StatusResponse = {
   authExpiresAt?: string | null;
   uploadCooldownUntil?: string | null;
   dirChecks: { dir: string; ok: boolean }[];
+};
+
+type PipelineSummary = {
+  planned: number;
+  rendered: number;
+  uploaded: number;
+  skippedUploadReason?: string;
+  warnings?: string[];
 };
 
 const cardStyle: React.CSSProperties = {
@@ -85,6 +93,32 @@ export default function StatusPage() {
     }
   };
 
+  const runFullPipeline = async () => {
+    setMessage(null);
+    const response = await fetch("/api/system/run-now", { method: "POST" });
+    const data = (await response.json()) as { ok?: boolean; error?: string; summary?: PipelineSummary };
+    if (!response.ok || !data.ok) {
+      setMessage(data.error ?? "Pipeline run failed.");
+      return;
+    }
+    const summary = data.summary;
+    if (!summary) {
+      setMessage("Pipeline run completed.");
+      return;
+    }
+    const lines = [
+      `Pipeline run completed: planned ${summary.planned}, rendered ${summary.rendered}, uploaded ${summary.uploaded}.`
+    ];
+    if (summary.skippedUploadReason) {
+      lines.push(`Upload skipped: ${summary.skippedUploadReason}`);
+    }
+    if (summary.warnings && summary.warnings.length > 0) {
+      lines.push(`Planner warnings: ${summary.warnings.join(" • ")}`);
+    }
+    setMessage(lines.join(" "));
+    await loadStatus();
+  };
+
   const startScheduler = async () => {
     setSchedulerMessage(null);
     const response = await fetch("/api/scheduler/start", { method: "POST" });
@@ -111,30 +145,31 @@ export default function StatusPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-      <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 32 }}>
-        <div>
-          <h1 style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1, lineHeight: 1.1, marginBottom: 12, color: '#0f172a' }}>
-            System Status
-          </h1>
-          <p style={{ fontSize: 17, maxWidth: 600, color: '#64748b' }}>
-            Quick diagnostics for environment, pipeline, and TikTok auth.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, fontSize: 14, color: "#64748b" }}>
-            Fix anything that shows “Missing” before you run the queue.
-            <InlineTip text="This is the fastest place to debug setup issues." />
+      <PageHeader
+        title="System Health"
+        description="Quick checks for setup, rendering, and TikTok connection."
+        actions={
+          <div className="wrap-actions">
+            <ActionButton label="Run system checks" onClick={loadStatus} title="Re-run environment checks." />
+            <ActionButton
+              label="Test render pipeline"
+              variant="secondary"
+              onClick={runPipeline}
+              title="Run a quick render test."
+            />
+            <ActionButton
+              label="Run full pipeline"
+              variant="outline"
+              onClick={runFullPipeline}
+              title="Plan, render, and upload a draft now."
+            />
           </div>
-        </div>
+        }
+      />
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-          <ActionButton label="Run checks" onClick={loadStatus} title="Re-run environment checks." />
-          <ActionButton
-            label="Test pipeline"
-            variant="secondary"
-            onClick={runPipeline}
-            title="Run a quick render test."
-          />
-        </div>
-      </header>
+      <div style={{ padding: 16, borderRadius: 16, border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", color: "#475569" }}>
+        Run checks anytime you change setup. Test render checks output without uploading. Run full pipeline plans, renders, and uploads a draft (respects caps).
+      </div>
 
       {message ? (
         <div style={{ padding: 20, borderRadius: 16, border: '1px solid #e2e8f0', backgroundColor: '#f0fdf4', fontSize: 16, color: '#059669', fontWeight: 600 }}>
@@ -148,9 +183,9 @@ export default function StatusPage() {
       ) : null}
 
       {status ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 32 }}>
+        <div className="grid-2" style={{ gap: 32 }}>
           <div style={cardStyle}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Environment</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Keys & Tools</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {status.envStatus.map((env) => (
                 <div key={env.key} style={rowStyle}>
@@ -170,7 +205,7 @@ export default function StatusPage() {
           </div>
 
           <div style={cardStyle}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Assets & Queue</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Library & Queue</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={rowStyle}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#475569' }}>Clips</span>
@@ -189,14 +224,14 @@ export default function StatusPage() {
                 <span style={valueStyle(status.scheduler.running)}>{status.scheduler.running ? "Running" : "Stopped"}</span>
               </div>
               <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-                <ActionButton label="Start scheduler" onClick={startScheduler} />
-                <ActionButton label="Stop scheduler" variant="outline" onClick={stopScheduler} />
+                <ActionButton label="Start auto-run" onClick={startScheduler} />
+                <ActionButton label="Stop auto-run" variant="outline" onClick={stopScheduler} />
               </div>
             </div>
           </div>
 
           <div style={cardStyle}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>TikTok</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>TikTok Connection</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={rowStyle}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#475569' }}>OAuth</span>

@@ -2,9 +2,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// DB path is fixed so it persists across restarts and crashes. Do not change unless migrating.
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url      = "file:../data/mutok.db"
 }
 
 model Setting {
@@ -32,16 +33,13 @@ model Clip {
   id          String   @id @default(cuid())
   filePath    String
   category    String
-  energy      Int
-  motion      String
   sync        String
-  vibe        String
   durationSec Float
   createdAt   DateTime @default(now())
+  clipSetItems ClipSetItem[]
 
   @@index([category])
   @@index([sync])
-  @@index([energy])
 }
 
 model Track {
@@ -63,9 +61,7 @@ model Snippet {
   startSec    Float
   durationSec Float
   energyScore Float
-  energy      Int?
   section     String?
-  vibe        String?
   approved    Boolean @default(false)
   moment3to7  Boolean @default(false)
   moment7to11 Boolean @default(false)
@@ -135,14 +131,11 @@ model HookRecipe {
   allowedSnippetTypes  Json
   disallowedContainers Json
   source               String?
-  inspoItemId          String?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @default(now()) @updatedAt
-  inspoItem            InspoItem? @relation(fields: [inspoItemId], references: [id])
   variants             Variant[]
 
   @@index([enabled])
-  @@index([inspoItemId])
 }
 
 model Cta {
@@ -172,17 +165,14 @@ model Variant {
   locked          Boolean    @default(false)
   createdBy       String     @default("ai")
   source          String?
-  inspoItemId     String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @default(now()) @updatedAt
-  inspoItem       InspoItem? @relation(fields: [inspoItemId], references: [id])
   cta             Cta?       @relation(fields: [ctaId], references: [id])
   recipe          HookRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@index([recipeId])
   @@index([ctaId])
   @@index([status])
-  @@index([inspoItemId])
 }
 
 model ArmStats {
@@ -247,50 +237,27 @@ model RunLog {
   @@index([runType, status])
 }
 
-model InspoItem {
-  id           String       @id @default(cuid())
-  source       String
-  sourceId     String?
-  title        String?
-  contentType  String?
-  assetType    String?
-  linkOriginal String?
-  copyRewrite  String?
-  whyItWorks   String?
-  description  String?
-  howToUse     String?
-  themeTags    Json?
-  purposeTags  Json?
-  genreTags    Json?
-  hashtags     Json?
-  stats        Json?
-  createdTime  DateTime?
-  seedPatterns Json?
-  favorite     Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  recipes      HookRecipe[]
-  variants     Variant[]
+model ClipSet {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  clipItems ClipSetItem[]
 
-  @@unique([source, sourceId])
-  @@index([source])
-  @@index([sourceId])
-  @@index([assetType])
-  @@index([favorite])
-  @@index([createdAt])
+  @@index([name])
 }
 
-model InspoImportLog {
+model ClipSetItem {
   id        String   @id @default(cuid())
-  source    String?
-  rawJson   Json
-  imported  Int
-  skipped   Int
-  errors    Json?
+  clipId    String
+  clipSetId String
   createdAt DateTime @default(now())
+  clip      Clip     @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  clipSet   ClipSet  @relation(fields: [clipSetId], references: [id], onDelete: Cascade)
 
-  @@index([source])
-  @@index([createdAt])
+  @@unique([clipId, clipSetId])
+  @@index([clipId])
+  @@index([clipSetId])
 }
 
 model WinnerExample {
@@ -312,18 +279,5 @@ model WinnerExample {
 
   @@index([rewardScore])
   @@index([hookFamily])
-  @@index([createdAt])
-}
-
-model VoiceBank {
-  id        String   @id @default(cuid())
-  text      String
-  tags      Json?
-  enabled   Boolean  @default(true)
-  weight    Float    @default(1)
-  createdAt DateTime @default(now())
-
-  @@index([enabled])
-  @@index([weight])
   @@index([createdAt])
 }

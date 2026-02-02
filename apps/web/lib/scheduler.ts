@@ -2,7 +2,7 @@ import cron, { ScheduledTask } from "node-cron";
 
 type SchedulerOptions = {
   enabled: boolean;
-  onRun: () => Promise<void>;
+  onRun: () => Promise<unknown>;
   cronExpression?: string;
   windowTimes?: string[];
   intervalMinutes?: number;

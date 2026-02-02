@@ -29,10 +29,15 @@ export async function GET(request: NextRequest) {
       const clipRefs = (plan.clipIds as string[])
         .map((id) => clipMap.get(id))
         .filter(Boolean);
+      const planWarningsRaw = (plan.experimentFlags as { warnings?: unknown } | null)?.warnings;
+      const planWarnings = Array.isArray(planWarningsRaw)
+        ? planWarningsRaw.filter((item) => typeof item === "string")
+        : [];
       return {
         ...plan,
         clips: clipRefs,
         recipeName: plan.recipeId ? recipeMap.get(plan.recipeId) ?? null : null,
+        warnings: planWarnings,
         hasSensitiveClip: (plan.clipIds as string[]).some((id) => {
           const clip = clipMap.get(id);
           return clip?.sync === "sensitive";

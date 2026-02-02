@@ -20,23 +20,51 @@ type UploadInitResponse = {
   };
 };
 
-const renderPending = async (limit: number) => {
+type RenderSummary = { rendered: number; failed: number };
+type UploadSummary = { uploaded: number; skippedReason?: string };
+export type PipelineSummary = {
+  planned: number;
+  rendered: number;
+  uploaded: number;
+  skippedUploadReason?: string;
+  warnings: string[];
+};
+
+const mapPrivacyLevel = (visibility: string): string => {
+  switch (visibility) {
+    case "PUBLIC":
+      return "PUBLIC_TO_EVERYONE";
+    case "FRIENDS":
+      return "MUTUAL_FOLLOW_FRIENDS";
+    case "PRIVATE":
+    default:
+      return "SELF_ONLY";
+  }
+};
+
+const renderPending = async (limit: number): Promise<RenderSummary> => {
   const renderPlans = await prisma.postPlan.findMany({
     where: { status: "PLANNED" },
     orderBy: { createdAt: "asc" },
     take: limit
   });
 
+  let rendered = 0;
+  let failed = 0;
   for (const plan of renderPlans) {
     try {
       await renderPostPlan(plan.id);
+      rendered += 1;
     } catch (error) {
+      failed += 1;
       await prisma.postPlan.update({
         where: { id: plan.id },
         data: { status: "FAILED" }
       });
     }
   }
+
+  return { rendered, failed };
 };
 
 const uploadRendered = async (
@@ -44,17 +72,24 @@ const uploadRendered = async (
   pendingCount: number,
   dailyUploads: number,
   rules: Awaited<ReturnType<typeof getRulesSettings>>
-) => {
+): Promise<UploadSummary> => {
   if (dailyUploads >= rules.spam_guardrails.daily_draft_upload_cap) {
     await logRunEvent({
       runType: "daily_upload_cap",
       status: "WARN",
       payloadExcerpt: `dailyUploads=${dailyUploads}`
     });
-    return;
+    return { uploaded: 0, skippedReason: "Daily upload cap reached." };
   }
   const accessToken = await getValidAccessToken();
-  if (!accessToken) return;
+  if (!accessToken) {
+    await logRunEvent({
+      runType: "upload_skipped",
+      status: "WARN",
+      payloadExcerpt: "Missing TikTok access token"
+    });
+    return { uploaded: 0, skippedReason: "TikTok connection missing or expired." };
+  }
 
   const tiktokSettings = await getTikTokSettings();
   const client = createTikTokClient({
@@ -71,17 +106,30 @@ const uploadRendered = async (
     orderBy: { createdAt: "asc" },
     take: Math.min(limit, maxUploads)
   });
+  if (uploadPlans.length === 0) {
+    await logRunEvent({
+      runType: "upload_skipped",
+      status: "WARN",
+      payloadExcerpt: "No rendered drafts available"
+    });
+    return { uploaded: 0, skippedReason: "No rendered drafts available to upload." };
+  }
 
+  let uploaded = 0;
+  let missingUploadUrl = 0;
   for (const plan of uploadPlans) {
     if (!plan.renderPath) {
       continue;
     }
     const fileStats = await stat(plan.renderPath);
     const exportDefaults = tiktokSettings.export_defaults;
+    const baseTitle = (plan.caption || exportDefaults.caption || "Draft from TikTok Growth Agent").trim();
+    const title = baseTitle.length > 2200 ? `${baseTitle.slice(0, 2197)}...` : baseTitle;
+    const privacyLevel = tiktokSettings.sandbox ? "SELF_ONLY" : mapPrivacyLevel(exportDefaults.visibility ?? "PUBLIC");
     const initResponse = (await client.initializeUpload({
       post_info: {
-        title: plan.caption || exportDefaults.caption,
-        privacy_level: exportDefaults.visibility,
+        title,
+        privacy_level: privacyLevel,
         disable_comment: !exportDefaults.allowComment,
         disable_duet: !exportDefaults.allowDuet,
         disable_stitch: !exportDefaults.allowStitch,
@@ -97,6 +145,7 @@ const uploadRendered = async (
     })) as UploadInitResponse;
     const uploadUrl = initResponse.data?.upload_url;
     if (!uploadUrl) {
+      missingUploadUrl += 1;
       continue;
     }
     const buffer = await readFile(plan.renderPath);
@@ -126,7 +175,18 @@ const uploadRendered = async (
         tiktokPublishId: initResponse.data?.publish_id ?? null
       }
     });
+    uploaded += 1;
   }
+
+  if (uploaded === 0 && missingUploadUrl > 0) {
+    await logRunEvent({
+      runType: "upload_skipped",
+      status: "WARN",
+      payloadExcerpt: "TikTok upload URL missing"
+    });
+    return { uploaded, skippedReason: "TikTok upload initialization failed." };
+  }
+  return { uploaded };
 };
 
 const parseWindow = (now: DateTime, value: string, jitterMinutes: number) => {
@@ -183,7 +243,7 @@ const getNextWindowTime = async (
   return getCandidate(0) ?? getCandidate(1) ?? now.plus({ hours: minGapHours });
 };
 
-export async function runScheduledCycle() {
+export async function runScheduledCycle(): Promise<PipelineSummary> {
   const rules = await getRulesSettings();
   const recovery = await getRecoveryStatus(rules);
   const postedCount = await prisma.postPlan.count({ where: { status: "POSTED" } });
@@ -192,6 +252,7 @@ export async function runScheduledCycle() {
   const draftCount = await getDraftCount();
   const pendingCount = await getPendingShareCount24h();
   const dailyUploads = await getDailyDraftUploadCount();
+  const warnings: string[] = [];
 
   if (!canUploadMore(pendingCount) || pendingCount >= 4 || draftCount >= rules.spam_guardrails.pending_drafts_cap) {
     await logRunEvent({
@@ -199,22 +260,49 @@ export async function runScheduledCycle() {
       status: "WARN",
       payloadExcerpt: `pendingCount=${pendingCount},drafts=${draftCount}`
     });
-    return;
+    return {
+      planned: 0,
+      rendered: 0,
+      uploaded: 0,
+      skippedUploadReason: "Pending drafts cap reached.",
+      warnings
+    };
   }
 
   if (await isCooldownActive()) {
-    return;
+    await logRunEvent({
+      runType: "upload_skipped",
+      status: "WARN",
+      payloadExcerpt: "Upload cooldown active"
+    });
+    return {
+      planned: 0,
+      rendered: 0,
+      uploaded: 0,
+      skippedUploadReason: "Upload cooldown active.",
+      warnings
+    };
   }
 
   const now = DateTime.local();
   const nextWindow = await getNextWindowTime(now, rules);
 
   const needed = Math.max(0, rules.target_queue_size - draftCount);
+  let planned = 0;
   if (needed > 0) {
-    await buildPlans(needed, { scheduledFor: nextWindow.toJSDate() });
+    const planResult = await buildPlans(needed, { scheduledFor: nextWindow.toJSDate() });
+    planned = planResult.createdIds.length;
+    warnings.push(...planResult.warnings);
   }
-  await renderPending(needed || effectiveCadence);
-  await uploadRendered(effectiveCadence, pendingCount, dailyUploads, rules);
+  const renderResult = await renderPending(needed || effectiveCadence);
+  const uploadResult = await uploadRendered(effectiveCadence, pendingCount, dailyUploads, rules);
+  return {
+    planned,
+    rendered: renderResult.rendered,
+    uploaded: uploadResult.uploaded,
+    skippedUploadReason: uploadResult.skippedReason,
+    warnings
+  };
 }
 
 export async function runAutopilotCycle() {

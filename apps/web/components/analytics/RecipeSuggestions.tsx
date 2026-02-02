@@ -59,12 +59,12 @@ export default function RecipeSuggestions() {
     <section style={cardStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Recipe Suggestions</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>Hook Suggestions</h2>
           <div style={{ color: "#64748b", marginTop: 8 }}>
-            Ask GPT to propose new recipes based on winners. You approve by adding as drafts.
+            Ask GPT to propose new hooks based on winners. You approve by adding as drafts.
           </div>
         </div>
-        <ActionButton label={loading ? "Loading..." : "Ask GPT"} onClick={fetchSuggestions} disabled={loading} />
+        <ActionButton label={loading ? "Loading..." : "Generate ideas"} onClick={fetchSuggestions} disabled={loading} />
       </div>
 
       {message ? (

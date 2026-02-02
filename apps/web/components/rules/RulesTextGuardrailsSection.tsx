@@ -12,8 +12,14 @@ export default function RulesTextGuardrailsSection({ rules, onChange }: Props) {
       <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 16 }}>
         Text Guardrails
       </h3>
+      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 12 }}>
+        Keep hooks clean and on-brand. These are safety checks on the text itself.
+      </div>
       <label style={labelStyle}>
         Max text lines
+        <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 500, textTransform: "none" }}>
+          Limits on-screen lines to keep it readable.
+        </div>
         <input
           type="number"
           min={1}
@@ -29,6 +35,9 @@ export default function RulesTextGuardrailsSection({ rules, onChange }: Props) {
       </label>
       <label style={labelStyle}>
         Banned phrases (one per line)
+        <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 500, textTransform: "none" }}>
+          Any hook or caption containing these phrases is blocked.
+        </div>
         <textarea
           style={{ ...inputStyle, minHeight: 120, lineHeight: 1.5 }}
           value={rules.guardrails.banned_phrases.join("\n")}
@@ -59,6 +68,9 @@ export default function RulesTextGuardrailsSection({ rules, onChange }: Props) {
           <span style={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>
             Allow sync-critical clips
           </span>
+          <span style={{ fontSize: 12, color: "#64748b" }}>
+            Use clips that must stay synced with the beat.
+          </span>
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }}>
           <input
@@ -74,6 +86,9 @@ export default function RulesTextGuardrailsSection({ rules, onChange }: Props) {
           />
           <span style={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>
             Allow hands/keys literal clips
+          </span>
+          <span style={{ fontSize: 12, color: "#64748b" }}>
+            Use clips that show hands/keys explicitly.
           </span>
         </label>
       </div>

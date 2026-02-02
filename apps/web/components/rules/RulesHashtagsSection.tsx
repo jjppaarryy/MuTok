@@ -12,6 +12,9 @@ export default function RulesHashtagsSection({ rules, onChange }: Props) {
       <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 16 }}>
         Captions
       </h3>
+      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 12 }}>
+        Control how captions are formatted and which hashtags are always included.
+      </div>
       <div style={{ padding: "8px 0" }}>
         <label style={{ display: "flex", alignItems: "center", gap: 16, cursor: "pointer" }}>
           <input
@@ -30,6 +33,7 @@ export default function RulesHashtagsSection({ rules, onChange }: Props) {
         <textarea
           style={{ ...inputStyle, minHeight: 100, lineHeight: 1.5 }}
           value={rules.caption_hashtags.join(" ")}
+          placeholder="#techno #newmusic #producer"
           onChange={(event) =>
             onChange(
               "caption_hashtags",

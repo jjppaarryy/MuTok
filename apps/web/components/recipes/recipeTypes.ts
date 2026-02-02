@@ -22,8 +22,27 @@ export type RecipeForm = {
   containerAllowed: "static_daw" | "montage" | "both";
 };
 
-export const CTA_OPTIONS = ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "PICK_AB"];
+export const CTA_OPTIONS = [
+  "KEEP_SKIP",
+  "COMMENT_VIBE",
+  "FOLLOW_FULL",
+  "SAVE_REWATCH",
+  "LINK_DM",
+  "PICK_AB"
+];
+export const CTA_LABELS: Record<string, string> = {
+  KEEP_SKIP: "Hold or skip",
+  COMMENT_VIBE: "Comment prompt",
+  FOLLOW_FULL: "Follow for more",
+  SAVE_REWATCH: "Save / rewatch",
+  LINK_DM: "Link / DM",
+  PICK_AB: "Pick A/B (legacy)"
+};
 export const SNIPPET_OPTIONS = ["moment_3_7", "moment_7_11"];
+export const SNIPPET_LABELS: Record<string, string> = {
+  moment_3_7: "Early hook in snippet",
+  moment_7_11: "Second hook in snippet"
+};
 
 export const getContainerAllowed = (recipe: Recipe): RecipeForm["containerAllowed"] => {
   const disallowed = recipe.disallowedContainers ?? [];

@@ -8,9 +8,7 @@ type Snippet = {
   startSec: number;
   durationSec: number;
   energyScore: number;
-  energy?: number | null;
   section?: string | null;
-  vibe?: string | null;
 };
 
 type SnippetListProps = {
@@ -99,23 +97,6 @@ export default function SnippetList({
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Energy</span>
-                <InlineTip text="Tag how intense this moment feels." />
-                <select
-                  style={selectStyle}
-                  value={snippet.energy ?? snippet.energyScore}
-                  onChange={(event) =>
-                    onUpdateSnippet(snippet.id, { energy: Number(event.target.value) })
-                  }
-                >
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 12, color: "#64748b" }}>Section</span>
                 <InlineTip text="Where does this sit in the song?" />
                 <select
@@ -128,30 +109,10 @@ export default function SnippetList({
                   }
                 >
                   <option value="unset">Unset</option>
-                  <option value="breakdown">Breakdown</option>
-                  <option value="build">Build</option>
-                  <option value="drop">Drop</option>
-                  <option value="payoff">Payoff</option>
-                  <option value="ambient">Ambient</option>
-                </select>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Vibe</span>
-                <InlineTip text="Helps match audio mood to clip vibe." />
-                <select
-                  style={selectStyle}
-                  value={snippet.vibe ?? "any"}
-                  onChange={(event) =>
-                    onUpdateSnippet(snippet.id, {
-                      vibe: event.target.value === "any" ? null : event.target.value
-                    })
-                  }
-                >
-                  <option value="any">Any</option>
-                  <option value="bright_clean">Bright clean</option>
-                  <option value="dark_moody">Dark moody</option>
-                  <option value="neon_club">Neon club</option>
-                  <option value="warm_home">Warm home</option>
+                  <option value="calm">Calm (no drums)</option>
+                  <option value="build">Build (rising)</option>
+                  <option value="peak">Peak (drums)</option>
+                  <option value="neutral">Neutral</option>
                 </select>
               </div>
             </div>

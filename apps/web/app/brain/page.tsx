@@ -93,7 +93,7 @@ export default function BrainPage() {
   }, []);
 
   const runNow = () => {
-    setMessage("Brain runs are disabled. Recipes are fixed and deterministic.");
+    setMessage("Brain runs are disabled. Hooks are fixed and deterministic.");
   };
 
   const savePrompt = async () => {
@@ -109,8 +109,8 @@ export default function BrainPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
       <PageHeader
         title="MuTok Brain"
-        description="Brain runs are disabled. Recipes are fixed and deterministic."
-        tip="Use analysis tools to review winners and propose new recipes."
+        description="Brain runs are disabled. Hooks are fixed and deterministic."
+        tip="Use learning tools to review winners and propose new hooks."
         actions={
           <div style={{ display: 'flex', gap: 16 }}>
             <ActionButton
@@ -129,8 +129,8 @@ export default function BrainPage() {
       />
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#64748b" }}>
-        Edit the prompt, then run the brain when you want new ideas.
-        <InlineTip text="If you don’t want AI plans, you can skip this page." />
+        Edit the prompt, then run the brain when you want new hook ideas.
+        <InlineTip text="If you don’t want AI suggestions, you can skip this page." />
       </div>
 
       {message ? (

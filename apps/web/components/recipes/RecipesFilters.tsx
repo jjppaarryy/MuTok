@@ -1,4 +1,4 @@
-import { CTA_OPTIONS } from "./recipeTypes";
+import { CTA_LABELS, CTA_OPTIONS } from "./recipeTypes";
 import { inputStyle, labelStyle } from "./recipesStyles";
 
 type Props = {
@@ -25,7 +25,7 @@ export default function RecipesFilters({
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
       <label style={labelStyle}>
-        Status
+        Hook status
         <select
           style={inputStyle}
           value={filterStatus}
@@ -42,7 +42,7 @@ export default function RecipesFilters({
           <option value="all">All</option>
           {CTA_OPTIONS.map((cta) => (
             <option key={cta} value={cta}>
-              {cta}
+              {CTA_LABELS[cta] ?? cta}
             </option>
           ))}
         </select>
@@ -61,7 +61,7 @@ export default function RecipesFilters({
         </select>
       </label>
       <label style={labelStyle}>
-        Search
+        Search hooks
         <input style={inputStyle} value={search} onChange={(event) => onSearchChange(event.target.value)} />
       </label>
     </div>
