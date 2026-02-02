@@ -4,6 +4,8 @@ export type RulesSettings = {
   allowed_containers: string[];
   montage: {
     clip_count: number;
+    clip_count_min: number;
+    clip_count_max: number;
     clip_duration_range: [number, number];
   };
   text_overlay: {
@@ -90,14 +92,8 @@ export type RulesSettings = {
     max_locked_share: number;
     prior_mean: number;
     prior_weight: number;
-    inspo_seed_enabled: boolean;
-    inspo_seed_weight: number;
-    inspo_seed_max_pulls: number;
     autopilot_enabled: boolean;
     autopilot_interval_hours: number;
-    autopilot_inspo_enabled: boolean;
-    autopilot_inspo_days: number;
-    autopilot_inspo_only_favorites: boolean;
     plateau_days: number;
     test_dimensions: {
       recipe: boolean;
@@ -131,6 +127,8 @@ export const defaultRules: RulesSettings = {
   allowed_containers: ["static_daw", "montage"],
   montage: {
     clip_count: 6,
+    clip_count_min: 3,
+    clip_count_max: 20,
     clip_duration_range: [0.4, 0.9]
   },
   text_overlay: {
@@ -220,7 +218,7 @@ export const defaultRules: RulesSettings = {
     require_montage_first_cut: true,
     require_moment_3_to_7: true,
     require_second_moment_7_to_11: true,
-    allowed_cta_types: ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "PICK_AB"],
+    allowed_cta_types: ["KEEP_SKIP", "COMMENT_VIBE", "FOLLOW_FULL", "SAVE_REWATCH", "LINK_DM", "PICK_AB"],
     explore_ratio: 0.25,
     recipe_daily_max: 3,
     preflight_min_score: 40,
@@ -236,14 +234,8 @@ export const defaultRules: RulesSettings = {
     max_locked_share: 0.7,
     prior_mean: 1,
     prior_weight: 2,
-    inspo_seed_enabled: true,
-    inspo_seed_weight: 2,
-    inspo_seed_max_pulls: 5,
     autopilot_enabled: false,
     autopilot_interval_hours: 4,
-    autopilot_inspo_enabled: false,
-    autopilot_inspo_days: 7,
-    autopilot_inspo_only_favorites: true,
     plateau_days: 7,
     test_dimensions: {
       recipe: true,

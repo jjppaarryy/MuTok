@@ -70,24 +70,10 @@ const buildMontagePlan = async (params: {
   }
 
   let total = durations.reduce((sum, value) => sum + value, 0);
-  let safety = 0;
-  while (total < params.totalDuration && safety < 50) {
-    for (let i = 0; i < params.clipPaths.length; i += 1) {
-      const cap = safeCap(i);
-      const randomDuration = params.minDur + Math.random() * span;
-      resultPaths.push(params.clipPaths[i]);
-      const nextDuration = Math.min(cap, randomDuration);
-      durations.push(nextDuration);
-      total += nextDuration;
-      if (total >= params.totalDuration) break;
-    }
-    safety += 1;
-  }
-
   if (total > 0 && total !== params.totalDuration) {
     const scale = params.totalDuration / total;
     for (let i = 0; i < durations.length; i += 1) {
-      const cap = safeCap(i % params.clipPaths.length);
+      const cap = safeCap(i);
       durations[i] = Math.min(cap, Math.max(0.2, durations[i] * scale));
     }
   }
@@ -112,6 +98,9 @@ export async function renderPostPlan(postPlanId: string) {
   if (clips.length !== clipIds.length) {
     throw new Error("Missing clip assets for render");
   }
+
+  const clipById = new Map(clips.map((c) => [c.id, c]));
+  const clipsInPlanOrder = clipIds.map((id) => clipById.get(id)!);
 
   const snippet = await prisma.snippet.findUnique({
     where: { id: plan.snippetId }
@@ -143,7 +132,7 @@ export async function renderPostPlan(postPlanId: string) {
   const outputPath = path.join(baseDir, `${postPlanId}.mp4`);
   await mkdir(path.dirname(outputPath), { recursive: true });
 
-  const clipPaths = clips.map((clip) => clip.filePath);
+  const clipPaths = clipsInPlanOrder.map((clip) => clip.filePath);
   const concatFilePath = path.join(concatDir, `${postPlanId}.txt`);
 
   // Ensure onscreenText is always a string (handle null case)
@@ -161,15 +150,17 @@ export async function renderPostPlan(postPlanId: string) {
     beat2_duration: rules.text_overlay.beat2_duration
   };
 
-  if (plan.container === "montage") {
-    const [minDur, maxDur] = rules.montage.clip_duration_range;
-    const totalDuration = Math.max(1, snippet.durationSec);
+  const totalDuration = Math.max(1, snippet.durationSec);
+  const [minDur, maxDur] = rules.montage.clip_duration_range;
+  const isStaticDawMulti = plan.container === "static_daw" && clipPaths.length > 1;
+
+  if (plan.container === "montage" || isStaticDawMulti) {
     const montagePlan = await buildMontagePlan({
       clipPaths,
       totalDuration,
       minDur,
       maxDur,
-      requireFirstCut: rules.viral_engine.require_montage_first_cut
+      requireFirstCut: isStaticDawMulti ? false : rules.viral_engine.require_montage_first_cut
     });
     await renderMontage({
       clipPaths: montagePlan.clipPaths,

@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { getRulesSettings } from "./settings";
 import { getEnabledHookRecipes } from "./hookRecipes";
 import { pickRandom, safeCategories } from "./plannerUtils";
+import { normalizeClipCategory } from "./clipCategories";
 import { recordArmUse } from "./optimizer";
 import { logRunEvent } from "./logs";
 import { buildClipSet, buildOnscreenAndCaption, evaluateCompatibility, isMontageTemplateBlocked } from "./plannerCoreUtils";
@@ -13,12 +14,7 @@ import { buildCooldownState, filterRecipesByCooldown, filterSnippetsByCooldown }
 type PlanResult = { createdIds: string[]; warnings: string[] };
 const isAntiAlgoText = (text: string) => {
   const normalized = text.toLowerCase();
-  return (
-    normalized.includes("algo") ||
-    normalized.includes("algorithm") ||
-    normalized.includes("not trending") ||
-    normalized.includes("not pushed")
-  );
+  return normalized.includes("algo") || normalized.includes("algorithm") || normalized.includes("not trending") || normalized.includes("not pushed");
 };
 export async function buildPlans(
   count: number,
@@ -30,7 +26,10 @@ export async function buildPlans(
   const recovery = await getRecoveryStatus(baseRules);
   const rules = applyRecoveryRules(baseRules, recovery);
   if (recovery.active) warnings.push("Recovery mode active: cadence and CTAs limited.");
-  const clips = await prisma.clip.findMany({ orderBy: { createdAt: "desc" } });
+  const clips = await prisma.clip.findMany({
+    include: { clipSetItems: true },
+    orderBy: { createdAt: "desc" }
+  });
   const snippets = await prisma.snippet.findMany({ where: { approved: true } });
   const tracks = await prisma.track.findMany();
   if (clips.length === 0) {
@@ -57,12 +56,9 @@ export async function buildPlans(
   }
   const montageEligible = clips.filter((clip) => {
     if (!rules.guardrails.allow_sync_critical && clip.sync === "critical") return false;
-    if (!rules.guardrails.allow_hands_keys_literal && clip.category === "Hands_keys_literal") {
-      return false;
-    }
     return true;
   });
-  const safeClips = clips.filter((clip) => safeCategories.includes(clip.category));
+  const safeClips = clips.filter((clip) => safeCategories.includes(normalizeClipCategory(clip.category)));
   const containers = rules.allowed_containers.length ? rules.allowed_containers : ["static_daw"];
   const recipes = await getEnabledHookRecipes();
   if (recipes.length === 0) {
@@ -82,6 +78,10 @@ export async function buildPlans(
   let todayContainerCounts = await getTodayContainerCounts();
   let todayCommentCtaCount = cooldownState.todayCommentCtaCount;
   for (let i = 0; i < count; i += 1) {
+    const planWarnings: string[] = [];
+    if (recovery.active) {
+      planWarnings.push("Recovery mode active: cadence and CTAs limited.");
+    }
     const containerSelection = await selectContainer(containers, rules);
     const preferredContainer = pickContainerForSlot(todayContainerCounts);
     let containerRelaxed = false;
@@ -97,12 +97,21 @@ export async function buildPlans(
     });
     container = clipSelection.container;
     containerRelaxed = clipSelection.containerRelaxed;
+    if (containerRelaxed) {
+      const msg = "Container selection relaxed.";
+      warnings.push(msg);
+      planWarnings.push(msg);
+    }
     if (clipSelection.warning) {
       console.warn(`[planner] ${clipSelection.warning}`);
       warnings.push(clipSelection.warning);
-      continue;
+      if (clipSelection.warning.includes("clip cap reached")) {
+        planWarnings.push(clipSelection.warning);
+      } else {
+        continue;
+      }
     }
-    const clipSet = clipSelection.clipSet;
+    let clipSet = clipSelection.clipSet;
     cooldownState.todayCommentCtaCount = todayCommentCtaCount;
     const recipeFilter = filterRecipesByCooldown(rules, recipes, cooldownState);
     if (recipeFilter.recipes.length === 0) {
@@ -111,12 +120,35 @@ export async function buildPlans(
       warnings.push(msg);
       continue;
     }
-    if (recipeFilter.relaxedPrefix) warnings.push("Beat1 prefix cooldown relaxed.");
-    if (recipeFilter.relaxedAntiAlgo) warnings.push("Anti-algo cap relaxed.");
-    if (recipeFilter.relaxedCta) warnings.push("CTA streak cap relaxed.");
-    const recipeSelection = await selectRecipe(recipeFilter.recipes.map((recipe) => recipe.id), rules);
-    const selectedRecipe =
-      recipeFilter.recipes.find((recipe) => recipe.id === recipeSelection.value) ?? recipeFilter.recipes[0];
+    if (recipeFilter.relaxedPrefix) {
+      warnings.push("Beat1 prefix cooldown relaxed.");
+      planWarnings.push("Beat1 prefix cooldown relaxed.");
+    }
+    if (recipeFilter.relaxedAntiAlgo) {
+      warnings.push("Anti-algo cap relaxed.");
+      planWarnings.push("Anti-algo cap relaxed.");
+    }
+    if (recipeFilter.relaxedCta) {
+      warnings.push("CTA streak cap relaxed.");
+      planWarnings.push("CTA streak cap relaxed.");
+    }
+    const allowedCtas = Array.isArray(viral.allowed_cta_types) ? viral.allowed_cta_types : [];
+    let recipePool = recipeFilter.recipes;
+    let enforceCta = false;
+    if (allowedCtas.length > 0) {
+      const filteredByCta = recipePool.filter((recipe) => allowedCtas.includes(recipe.ctaType));
+      if (filteredByCta.length > 0) {
+        recipePool = filteredByCta;
+        enforceCta = true;
+      } else {
+        const msg = "No recipes match Viral Engine CTA list. Ignoring CTA filter.";
+        console.warn(`[planner] ${msg}`);
+        warnings.push(msg);
+        planWarnings.push(msg);
+      }
+    }
+    const recipeSelection = await selectRecipe(recipePool.map((recipe) => recipe.id), rules);
+    const selectedRecipe = recipePool.find((recipe) => recipe.id === recipeSelection.value) ?? recipePool[0];
     const disallowedContainers = Array.isArray(selectedRecipe.disallowedContainers)
       ? (selectedRecipe.disallowedContainers as string[])
       : [];
@@ -126,10 +158,7 @@ export async function buildPlans(
       warnings.push(msg);
       continue;
     }
-    if (
-      viral.allowed_cta_types.length > 0 &&
-      !viral.allowed_cta_types.includes(selectedRecipe.ctaType)
-    ) {
+    if (enforceCta && !allowedCtas.includes(selectedRecipe.ctaType)) {
       const msg = "Recipe CTA not allowed by Viral Engine.";
       console.warn(`[planner] ${msg}`);
       warnings.push(msg);
@@ -152,6 +181,7 @@ export async function buildPlans(
     snippetPool = snippetFilter.snippets;
     if (snippetFilter.relaxed) {
       warnings.push("Snippet cooldown relaxed.");
+      planWarnings.push("Snippet cooldown relaxed.");
     }
     const snippetSelection = await selectSnippet(
       snippetPool.map((item) => ({ id: item.id, moment3to7: item.moment3to7, moment7to11: item.moment7to11 })),
@@ -165,6 +195,65 @@ export async function buildPlans(
       warnings.push(msg);
       continue;
     }
+    if (container === "montage" && clipSet.length > 0 && snippet.durationSec) {
+      const [minDur, maxDur] = rules.montage.clip_duration_range;
+      const effectiveMaxDur = minDur + Math.random() * Math.max(0.01, maxDur - minDur);
+      const montageMax = rules.montage.clip_count_max ?? rules.montage.clip_count;
+      const clipUsable = (dur?: number | null) =>
+        dur && dur > 0 ? Math.min(dur, effectiveMaxDur) : effectiveMaxDur;
+      let usableDur = clipSet.reduce(
+        (sum, c) => sum + clipUsable(c.durationSec),
+        0
+      );
+      if (usableDur < snippet.durationSec) {
+        let remainingPool = eligibleMontageClips.filter(
+          (c) => !clipSet.some((x) => x.id === c.id)
+        );
+        while (
+          usableDur < snippet.durationSec &&
+          remainingPool.length > 0 &&
+          clipSet.length < montageMax
+        ) {
+          const picked = pickRandom(remainingPool);
+          clipSet = [...clipSet, picked];
+          usableDur += clipUsable(picked.durationSec);
+          remainingPool = remainingPool.filter((c) => c.id !== picked.id);
+        }
+        if (usableDur < snippet.durationSec) {
+          const msg = "Montage clip cap reached before covering snippet.";
+          warnings.push(msg);
+          planWarnings.push(msg);
+        }
+      }
+    }
+    if (container !== "montage" && clipSet.length > 0 && snippet.durationSec) {
+      const maxStaticDawClips = 3;
+      const clipUsable = (dur?: number | null) => (dur && dur > 0 ? dur : 0);
+      let totalDur = clipSet.reduce(
+        (sum, c) => sum + clipUsable(c.durationSec),
+        0
+      );
+      if (totalDur < snippet.durationSec) {
+        let remainingPool = eligibleMontageClips.filter(
+          (c) => !clipSet.some((x) => x.id === c.id)
+        );
+        while (
+          totalDur < snippet.durationSec &&
+          remainingPool.length > 0 &&
+          clipSet.length < maxStaticDawClips
+        ) {
+          const picked = pickRandom(remainingPool);
+          clipSet = [...clipSet, picked];
+          totalDur += clipUsable(picked.durationSec);
+          remainingPool = remainingPool.filter((c) => c.id !== picked.id);
+        }
+        if (totalDur < snippet.durationSec) {
+          const msg = "Static DAW clip cap reached before covering snippet.";
+          warnings.push(msg);
+          planWarnings.push(msg);
+        }
+      }
+    }
     const { blocked, score, reasons } = evaluateCompatibility(clipSet, snippet, rules);
     const beat1 = pickFixedBeat(selectedRecipe.beat1Templates);
     const beat2 = pickFixedBeat(selectedRecipe.beat2Templates);
@@ -177,7 +266,10 @@ export async function buildPlans(
     if (textResult.warning) {
       console.warn(`[planner] ${textResult.warning}`);
       warnings.push(textResult.warning);
-      continue;
+      planWarnings.push(textResult.warning);
+      if (!textResult.onscreenText || !textResult.caption) {
+        continue;
+      }
     }
     if (isMontageTemplateBlocked(container, clipSet, cooldownState)) {
       const msg = "Montage template cooldown active.";
@@ -215,6 +307,7 @@ export async function buildPlans(
           container_relaxed: containerRelaxed,
           tested_recipe: rules.optimiser_policy.test_dimensions.recipe,
           tested_container: rules.optimiser_policy.test_dimensions.container,
+          warnings: planWarnings,
           comparisonMode: false,
           optionsCount: 1,
           selection: {
@@ -279,4 +372,3 @@ export async function buildPlans(
   }
   return { createdIds, warnings };
 }
-

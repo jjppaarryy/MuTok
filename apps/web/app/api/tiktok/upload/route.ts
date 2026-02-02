@@ -57,6 +57,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not connected" }, { status: 401 });
     }
 
+    const reserved = await prisma.postPlan.updateMany({
+      where: { id: postPlanId, status: "RENDERED" },
+      data: { status: "UPLOADING" }
+    });
+    if (reserved.count === 0) {
+      return NextResponse.json(
+        { error: "PostPlan is not ready for upload." },
+        { status: 409 }
+      );
+    }
     const postPlan = await prisma.postPlan.findUnique({
       where: { id: postPlanId }
     });
@@ -80,6 +90,7 @@ export async function POST(request: Request) {
       where: { id: { in: clipIds } }
     });
     if (clips.some((clip) => clip.sync === "critical")) {
+      await prisma.postPlan.update({ where: { id: postPlanId }, data: { status: "FAILED" } });
       return NextResponse.json(
         { error: "Critical sync clip detected. Upload blocked." },
         { status: 400 }
@@ -93,6 +104,7 @@ export async function POST(request: Request) {
     });
 
     if (!postPlan.renderPath) {
+      await prisma.postPlan.update({ where: { id: postPlanId }, data: { status: "FAILED" } });
       return NextResponse.json({ error: "Missing renderPath" }, { status: 400 });
     }
 
@@ -136,7 +148,16 @@ export async function POST(request: Request) {
       videoBuffer.byteOffset,
       videoBuffer.byteOffset + videoBuffer.byteLength
     );
-    await client.uploadVideo(uploadUrl, arrayBuffer);
+    try {
+      await client.uploadVideo(uploadUrl, arrayBuffer);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed";
+      if (isSpamRisk(message)) {
+        await setCooldown(24);
+      }
+      await prisma.postPlan.update({ where: { id: postPlanId }, data: { status: "RENDERED" } });
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
 
     await prisma.postPlan.update({
       where: { id: postPlanId },

@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import ActionButton from "../components/ActionButton";
-import InlineTip from "../components/InlineTip";
-import StatCard from "../components/StatCard";
+import { useEffect, useMemo, useState } from "react";
+import PageHeader from "../components/PageHeader";
+import DailyHighlightsCard from "../components/dashboard/DailyHighlightsCard";
+import DailyStudioHero from "../components/dashboard/DailyStudioHero";
+import HealthCheckCard from "../components/dashboard/HealthCheckCard";
+import SetupChecklistCard from "../components/dashboard/SetupChecklistCard";
+import StudioStatsGrid from "../components/dashboard/StudioStatsGrid";
+import SupplyCheckCard from "../components/dashboard/SupplyCheckCard";
+import { SNIPPET_LABELS } from "../components/recipes/recipeTypes";
 
 type Health = {
   clipCount: number;
@@ -14,59 +19,20 @@ type Health = {
   dailyUploads?: number;
   authConnected?: boolean;
   authExpiresAt?: string | null;
-  scheduler?: { running: boolean; hasTask: boolean };
-  uploadCooldownUntil?: string | Date | null;
-  recovery?: { active: boolean; viewsDrop: number; view2sDrop: number; spamErrors: number };
+  recovery?: { active: boolean; spamErrors: number };
 };
 
 type Coverage = {
   activeRecipes: number;
   requiredRecipes: number;
   shortfall: number;
-  cadencePerDay: number;
-  cooldownDays: number;
 };
 
-export default function DashboardPage() {
-  const styles = {
-    container: {},
-    header: {},
-    headerTitle: {
-      fontSize: 42,
-      fontWeight: 800,
-      letterSpacing: -1,
-      lineHeight: 1.1,
-      marginBottom: 12
-    },
-    headerSubtitle: { fontSize: 17, maxWidth: 600 },
-    headerActions: {},
-    section: { padding: 48, borderRadius: 24 },
-    sectionHeader: {},
-    sectionHeaderStack: {},
-    sectionTitle: { fontSize: 24, fontWeight: 700, marginBottom: 8 },
-    sectionSubtitle: { fontSize: 16 },
-    sectionBadge: {
-      padding: "10px 20px",
-      borderRadius: 20,
-      fontSize: 14,
-      fontWeight: 600
-    },
-    queueGrid: {},
-    healthGrid: {},
-    healthCard: { padding: 32, borderRadius: 20 },
-    healthLabel: {
-      fontSize: 13,
-      fontWeight: 600,
-      textTransform: "uppercase",
-      letterSpacing: 0.5
-    },
-    healthValue: { fontSize: 32, fontWeight: 700, marginTop: 12 },
-    healthHint: { fontSize: 14, marginTop: 8 },
-    sectionStack: {},
-    alertCard: { padding: 24, borderRadius: 16, fontSize: 16, fontWeight: 500 },
-    infoCard: { padding: 24, borderRadius: 16, fontSize: 16 }
-  } as const;
+type NextStep = { label: string; href: string; reason: string };
+type ChecklistItem = { label: string; href: string; done: boolean };
+type Highlights = { winnerHook?: string | null; snippetTrend?: string | null };
 
+export default function DashboardPage() {
   const [health, setHealth] = useState<Health>({
     clipCount: 0,
     trackCount: 0,
@@ -75,12 +41,16 @@ export default function DashboardPage() {
     pendingCount: 0,
     dailyUploads: 0,
     authConnected: false,
-    authExpiresAt: null,
-    scheduler: { running: false, hasTask: false }
+    authExpiresAt: null
   });
   const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [retireCount, setRetireCount] = useState<number>(0);
   const [nextRun, setNextRun] = useState<string>("—");
+  const [cadencePerDay, setCadencePerDay] = useState<number>(3);
+  const [montageClipCount, setMontageClipCount] = useState<number>(6);
+  const [montageAllowed, setMontageAllowed] = useState<boolean>(false);
+  const [highlights, setHighlights] = useState<Highlights | null>(null);
+  const [checklistCollapsed, setChecklistCollapsed] = useState<boolean>(false);
 
   const loadHealth = async () => {
     const response = await fetch("/api/dashboard/health");
@@ -91,10 +61,22 @@ export default function DashboardPage() {
   const loadNextRun = async () => {
     const response = await fetch("/api/settings");
     const data = (await response.json()) as {
-      rules: { post_time_windows: string[]; spam_guardrails?: { window_jitter_minutes?: number } };
+      rules: {
+        post_time_windows: string[];
+        cadence_per_day?: number;
+        allowed_containers?: string[];
+        montage?: { clip_count?: number; clip_count_min?: number; clip_count_max?: number };
+        spam_guardrails?: { window_jitter_minutes?: number };
+      };
     };
     const windows = data.rules.post_time_windows ?? [];
     const jitter = data.rules.spam_guardrails?.window_jitter_minutes ?? 0;
+    setCadencePerDay(data.rules.cadence_per_day ?? 3);
+    setMontageAllowed((data.rules.allowed_containers ?? []).includes("montage"));
+    const m = data.rules.montage;
+    const min = m?.clip_count_min ?? m?.clip_count ?? 6;
+    const max = m?.clip_count_max ?? m?.clip_count ?? 6;
+    setMontageClipCount(Math.round((min + max) / 2));
     const now = new Date();
     const candidates = windows
       .map((time) => {
@@ -131,12 +113,24 @@ export default function DashboardPage() {
       const data = JSON.parse(text) as {
         coverage?: Coverage;
         notifications?: { retireCandidates?: Array<{ recipeId: string }> };
+        recipeLeaderboard?: Array<{ recipe: string; score: number; count: number }>;
+        snippetLeaderboard?: Array<{ snippetStrategy: string; score: number; count: number }>;
       };
       setCoverage(data.coverage ?? null);
       setRetireCount(data.notifications?.retireCandidates?.length ?? 0);
+      const winnerHook = data.recipeLeaderboard?.[0]?.recipe ?? null;
+      const topSnippet = data.snippetLeaderboard?.[0]?.snippetStrategy ?? null;
+      const snippetTrend =
+        topSnippet && topSnippet !== "any"
+          ? SNIPPET_LABELS[topSnippet] ?? topSnippet
+          : topSnippet === "any"
+            ? "Any snippet"
+            : null;
+      setHighlights({ winnerHook, snippetTrend });
     } catch {
       setCoverage(null);
       setRetireCount(0);
+      setHighlights(null);
     }
   };
 
@@ -146,177 +140,139 @@ export default function DashboardPage() {
     void loadCoverage();
   }, []);
 
-  const topUpDrafts = async () => {
+  const draftActionLabel =
+    cadencePerDay === 1 ? "Generate today’s draft" : "Generate today’s drafts";
+
+  const nextSteps = useMemo<NextStep[]>(() => {
+    const steps: NextStep[] = [];
+    if (!health.authConnected) {
+      steps.push({ label: "Connect TikTok", href: "/connect", reason: "Required to upload drafts." });
+    }
+    if (health.clipCount === 0 || health.trackCount === 0) {
+      steps.push({ label: "Add clips & tracks", href: "/assets", reason: "Needed to build new drafts." });
+    }
+    if (health.approvedSnippets === 0) {
+      steps.push({ label: "Approve snippets", href: "/assets", reason: "Snippets fuel the planner." });
+    }
+    if ((coverage?.shortfall ?? 0) > 0) {
+      steps.push({ label: "Add hooks", href: "/recipes", reason: "You need more hooks to stay consistent." });
+    }
+    if (health.draftCount === 0) {
+      steps.push({ label: draftActionLabel, href: "/plan", reason: "Fill the queue so you can post." });
+    }
+    if (steps.length === 0) {
+      steps.push({ label: "Review queue", href: "/queue", reason: "You’re ready to post." });
+    }
+    return steps.slice(0, 4);
+  }, [coverage?.shortfall, draftActionLabel, health]);
+
+  const weeklyTarget = Math.max(1, cadencePerDay * 7);
+  const hooksTarget = coverage?.requiredRecipes ?? 0;
+  const snippetsTarget = weeklyTarget;
+  const montageRatio = montageAllowed ? 1 / 3 : 0;
+  const avgClipsPerPost = montageAllowed
+    ? (1 - montageRatio) * 1 + montageRatio * Math.max(1, montageClipCount)
+    : 1;
+  const clipsTarget = Math.ceil(weeklyTarget * avgClipsPerPost);
+
+  const checklist = useMemo<ChecklistItem[]>(() => {
+    return [
+      { label: "Connect TikTok", href: "/connect", done: Boolean(health.authConnected) },
+      { label: "Upload clips + tracks", href: "/assets", done: health.clipCount > 0 && health.trackCount > 0 },
+      { label: "Approve snippets", href: "/assets", done: health.approvedSnippets > 0 },
+      { label: "Create hooks", href: "/recipes", done: (coverage?.activeRecipes ?? 0) > 0 },
+      { label: "Generate today’s drafts", href: "/plan", done: health.draftCount > 0 }
+    ];
+  }, [coverage?.activeRecipes, health]);
+
+  const allChecklistDone = useMemo(
+    () => checklist.every((item) => item.done),
+    [checklist]
+  );
+
+  useEffect(() => {
+    if (allChecklistDone) {
+      setChecklistCollapsed(true);
+    }
+  }, [allChecklistDone]);
+
+  const readinessMissing = useMemo(() => {
+    const missing: string[] = [];
+    if (!health.authConnected) missing.push("Connect TikTok");
+    if (health.clipCount === 0) missing.push("Add clips");
+    if (health.trackCount === 0) missing.push("Add tracks");
+    if (health.approvedSnippets === 0) missing.push("Approve snippets");
+    if ((coverage?.shortfall ?? 0) > 0) missing.push(`${coverage?.shortfall} hooks`);
+    if (health.draftCount === 0) missing.push(draftActionLabel);
+    return missing;
+  }, [coverage?.shortfall, draftActionLabel, health]);
+
+  const readinessText =
+    readinessMissing.length === 0
+      ? "Ready to post today."
+      : `Missing: ${readinessMissing.slice(0, 3).join(", ")}${readinessMissing.length > 3 ? "…" : ""}`;
+
+  const primaryActionLabel = `Generate today’s ${cadencePerDay} draft${cadencePerDay === 1 ? "" : "s"}`;
+  const nextAction = nextSteps[0];
+
+  const handleTopUp = async () => {
     await fetch("/api/queue/topup", { method: "POST" });
     await loadHealth();
   };
 
-  const generateNext = async () => {
-    await fetch("/api/queue/topup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ limit: 2, dryRun: true })
-    });
-    await loadHealth();
-  };
-
   return (
-    <div style={styles.container} className="dash-stack">
-      {/* Header */}
-      <header style={styles.header} className="dash-header">
-        <div>
-          <h1 style={styles.headerTitle} className="dash-title text-slate-900">
-            Dashboard
-          </h1>
-          <p style={styles.headerSubtitle} className="dash-subtitle text-slate-600">
-            Queue readiness, scheduler status, and what to do next.
-          </p>
-        </div>
-        <div style={styles.headerActions} className="dash-actions">
-          <ActionButton
-            label="Top up drafts"
-            onClick={topUpDrafts}
-            title="Make new plans to fill the queue."
-          />
-          <ActionButton
-            label="Generate next"
-            variant="secondary"
-            onClick={generateNext}
-            title="Preview a couple of plans without rendering."
-          />
-        </div>
-      </header>
+    <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+      <PageHeader
+        title="Daily Studio"
+        description="Your single place to prepare today’s drafts."
+      />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#64748b" }}>
-        Order: Connect → Add clips/tracks → Approve snippets → Set rules → Queue drafts
-        <InlineTip text="You can still do everything manually if you want. The AI just speeds it up." />
-      </div>
+      <DailyStudioHero
+        readinessText={readinessText}
+        readinessTone={readinessMissing.length === 0 ? "ready" : "missing"}
+        nextRun={nextRun}
+        primaryActionLabel={primaryActionLabel}
+        onPrimaryAction={handleTopUp}
+        nextAction={nextAction}
+      />
 
-      {/* Queue Overview Section */}
-      <section style={styles.section} className="panel">
-        <div style={styles.sectionHeader} className="dash-section-header">
-          <div style={styles.sectionHeaderStack} className="dash-section-stack">
-            <h2 style={styles.sectionTitle} className="dash-section-title text-slate-900">Queue overview</h2>
-            <p style={styles.sectionSubtitle} className="dash-section-subtitle text-slate-600">Live counters and the next scheduled push.</p>
-          </div>
-          <span style={styles.sectionBadge} className="bg-slate-100 text-slate-600">
-            Live
-          </span>
-        </div>
-        <div style={styles.queueGrid} className="dash-grid-queue">
-          <StatCard
-            title="Drafts queued"
-            value={String(health.draftCount)}
-            hint={`Next run: ${nextRun}`}
-          />
-          <StatCard
-            title="Pending share cap"
-            value={`${health.pendingCount ?? 0}/5`}
-            hint="24h window"
-          />
-          <StatCard
-            title="Daily uploads"
-            value={`${health.dailyUploads ?? 0}/3`}
-            hint="Daily cap"
-          />
-          <StatCard title="Clips available" value={String(health.clipCount)} />
-          <StatCard
-            title="Approved snippets"
-            value={String(health.approvedSnippets)}
-          />
-        </div>
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 }}>
+        <SetupChecklistCard
+          checklist={checklist}
+          collapsed={checklistCollapsed}
+          onToggle={() => setChecklistCollapsed((prev) => !prev)}
+        />
+        <DailyHighlightsCard highlights={highlights} />
       </section>
 
+      <StudioStatsGrid
+        draftCount={health.draftCount}
+        nextRun={nextRun}
+        activeHooks={coverage?.activeRecipes ?? 0}
+        hooksShortfall={coverage?.shortfall ?? 0}
+        approvedSnippets={health.approvedSnippets}
+        clipCount={health.clipCount}
+        trackCount={health.trackCount}
+      />
 
-      {/* System Health Section */}
-      <section style={styles.section} className="panel">
-        <div style={styles.sectionHeader} className="dash-section-header">
-          <div style={styles.sectionHeaderStack} className="dash-section-stack">
-            <h2 style={styles.sectionTitle} className="dash-section-title text-slate-900">System health</h2>
-            <p style={styles.sectionSubtitle} className="dash-section-subtitle text-slate-600">Auth, scheduler and cooldown signals.</p>
-          </div>
-          <span style={styles.sectionBadge} className="bg-slate-100 text-slate-600">
-            Status
-          </span>
-        </div>
-        <div style={styles.healthGrid} className="dash-grid-health">
-          <div style={styles.healthCard} className="card">
-            <div style={styles.healthLabel} className="text-slate-500">TikTok OAuth</div>
-            <div style={styles.healthValue} className="text-slate-900">
-              {health.authConnected ? "Connected" : "Disconnected"}
-            </div>
-            <div style={styles.healthHint} className="text-slate-500">
-              {health.authExpiresAt
-                ? `Expires: ${new Date(health.authExpiresAt).toLocaleString()}`
-                : "No token"}
-            </div>
-          </div>
-          <div style={styles.healthCard} className="card">
-            <div style={styles.healthLabel} className="text-slate-500">Scheduler</div>
-            <div style={styles.healthValue} className="text-slate-900">
-              {health.scheduler?.running ? "Running" : "Stopped"}
-            </div>
-            <div style={styles.healthHint} className="text-slate-500">
-              {health.scheduler?.hasTask ? "Cron active" : "No task"}
-            </div>
-          </div>
-          <div style={styles.healthCard} className="card">
-            <div style={styles.healthLabel} className="text-slate-500">Upload cooldown</div>
-            <div style={styles.healthValue} className="text-slate-900">
-              {health.uploadCooldownUntil ? "Active" : "None"}
-            </div>
-            <div style={styles.healthHint} className="text-slate-500">
-              {health.uploadCooldownUntil
-                ? new Date(health.uploadCooldownUntil).toLocaleString()
-                : "No cooldown"}
-            </div>
-          </div>
-        </div>
-      </section>
+      <SupplyCheckCard
+        hooksTarget={hooksTarget || weeklyTarget}
+        hooksValue={coverage?.activeRecipes ?? 0}
+        snippetsTarget={snippetsTarget}
+        snippetsValue={health.approvedSnippets}
+        clipsTarget={clipsTarget}
+        clipsValue={health.clipCount}
+        montageAllowed={montageAllowed}
+        avgClipsPerPost={avgClipsPerPost}
+      />
 
-      {/* Alerts Section */}
-      <section style={styles.section} className="panel">
-        <div style={{ marginBottom: 32 }}>
-          <h2 style={styles.sectionTitle} className="dash-section-title text-slate-900">Alerts</h2>
-          <p style={styles.sectionSubtitle} className="dash-section-subtitle text-slate-600">Things to fix before your next run.</p>
-        </div>
-        <div style={styles.sectionStack} className="dash-stack-16">
-          {(health.clipCount === 0 || health.trackCount === 0) && (
-            <div style={styles.alertCard} className="card text-warning">
-              Missing assets. Upload clips and tracks before generating plans.
-            </div>
-          )}
-          {health.approvedSnippets === 0 && (
-            <div style={styles.alertCard} className="card text-warning">
-              No approved snippets. Generate snippets and approve at least one.
-            </div>
-          )}
-          {health.pendingCount && health.pendingCount >= 4 ? (
-            <div style={styles.alertCard} className="card text-warning">
-              Pending share cap approaching ({health.pendingCount}/5).
-            </div>
-          ) : (
-            <div style={styles.infoCard} className="card text-slate-600">
-              No critical alerts right now.
-            </div>
-          )}
-          {coverage && coverage.shortfall > 0 ? (
-            <div style={styles.alertCard} className="card text-warning">
-              You need {coverage.shortfall} more active recipes for {coverage.cadencePerDay}/day.
-            </div>
-          ) : null}
-          {retireCount > 0 ? (
-            <div style={styles.alertCard} className="card text-warning">
-              {retireCount} recipes are ready to retire.
-            </div>
-          ) : null}
-          {health.recovery?.active ? (
-            <div style={styles.alertCard} className="card text-warning">
-              Recovery mode active: performance drop detected. Posting reduced.
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <HealthCheckCard
+        authConnected={health.authConnected}
+        authExpiresAt={health.authExpiresAt}
+        recoveryActive={health.recovery?.active}
+        spamErrors={health.recovery?.spamErrors}
+        retireCount={retireCount}
+      />
     </div>
   );
 }

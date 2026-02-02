@@ -1,11 +1,19 @@
 import { prisma } from "./prisma";
 import { computeCompatibility } from "../../../packages/core/src/scoring";
-import { pickRandom } from "./plannerUtils";
-import { selectClip } from "./planSelection";
+import { pickMany, pickRandom, shuffle } from "./plannerUtils";
+import { normalizeClipCategory } from "./clipCategories";
 import type { RulesSettings } from "./rulesConfig";
 import type { CooldownState } from "./plannerCooldowns";
 
-type Clip = Awaited<ReturnType<typeof prisma.clip.findMany>>[number];
+function getMontageClipCountRange(rules: RulesSettings): [number, number] {
+  const min = rules.montage.clip_count_min ?? rules.montage.clip_count;
+  const max = rules.montage.clip_count_max ?? rules.montage.clip_count;
+  return [Math.max(1, min), Math.max(1, max)];
+}
+
+type Clip = Awaited<ReturnType<typeof prisma.clip.findMany>>[number] & {
+  clipSetItems?: { clipSetId: string }[];
+};
 type Snippet = Awaited<ReturnType<typeof prisma.snippet.findMany>>[number];
 
 export const countHashtags = (caption: string) =>
@@ -20,18 +28,12 @@ export const evaluateCompatibility = (
     computeCompatibility(
       {
         id: clip.id,
-        energy: clip.energy,
-        motion: clip.motion as "low" | "med" | "high",
         sync: clip.sync as "safe" | "sensitive" | "critical",
-        category: clip.category,
-        vibe: clip.vibe
+        category: normalizeClipCategory(clip.category)
       },
       {
         id: snippet.id,
-        energyScore: snippet.energyScore,
-        energy: snippet.energy,
-        section: snippet.section,
-        vibe: snippet.vibe
+        section: snippet.section
       },
       { disallowHandsKeysLiteral: !rules.guardrails.allow_hands_keys_literal }
     )
@@ -52,14 +54,38 @@ export const buildClipSet = async (params: {
   eligibleMontageClips: Clip[];
   eligibleSafeClips: Clip[];
   clips: Clip[];
+  minDurationSec?: number;
 }) => {
   const { rules, eligibleMontageClips, eligibleSafeClips, clips } = params;
   let { container } = params;
   let containerRelaxed = false;
   let clipSet: Clip[] = [];
   let warning: string | null = null;
+  const [montageMin, montageMax] = getMontageClipCountRange(rules);
+  const montageLow = Math.min(montageMin, montageMax);
+  const montageHigh = Math.max(montageMin, montageMax);
+  const montageCount =
+    montageLow + Math.floor(Math.random() * (montageHigh - montageLow + 1));
 
-  if (container === "montage" && eligibleMontageClips.length < rules.montage.clip_count) {
+  const buildClipGroups = (pool: Clip[]) => {
+    const groups = new Map<string, Clip[]>();
+    const ungrouped: Clip[] = [];
+    pool.forEach((clip) => {
+      const setIds = clip.clipSetItems?.map((item) => item.clipSetId) ?? [];
+      if (setIds.length === 0) {
+        ungrouped.push(clip);
+        return;
+      }
+      setIds.forEach((setId) => {
+        const group = groups.get(setId) ?? [];
+        group.push(clip);
+        groups.set(setId, group);
+      });
+    });
+    return { groups, ungrouped };
+  };
+
+  if (container === "montage" && eligibleMontageClips.length < montageCount) {
     if (params.containers.includes("static_daw")) {
       container = "static_daw";
       containerRelaxed = true;
@@ -69,30 +95,39 @@ export const buildClipSet = async (params: {
   }
 
   if (!warning && container === "montage") {
-    const dawAnchors = eligibleMontageClips.filter((clip) => clip.category === "DAW_screen");
-    let firstClip = null as Clip | null;
-    if (dawAnchors.length > 0) {
-      const selection = await selectClip(dawAnchors.map((clip) => clip.id), rules);
-      firstClip = dawAnchors.find((clip) => clip.id === selection.value) ?? pickRandom(dawAnchors);
+    const { groups, ungrouped } = buildClipGroups(eligibleMontageClips);
+    const groupCandidates = [...groups.entries()].filter(([, group]) => group.length >= montageCount);
+    const rawPool =
+      groupCandidates.length > 0
+        ? pickRandom(groupCandidates)[1]
+        : eligibleMontageClips.length >= montageCount
+          ? eligibleMontageClips
+          : ungrouped;
+    const groupPool = shuffle([...rawPool]);
+
+    if (groupPool.length === 0) {
+      warning = "No eligible clips for montage.";
+    } else {
+      clipSet = pickMany(groupPool, Math.min(montageCount, groupPool.length));
     }
-    const remainingPool = eligibleMontageClips.filter((clip) => clip.id !== firstClip?.id);
-    const neededClips = Math.max(0, rules.montage.clip_count - (firstClip ? 1 : 0));
-    const rest: Clip[] = [];
-    let pool = [...remainingPool];
-    while (pool.length > 0 && rest.length < neededClips) {
-      const selection = await selectClip(pool.map((clip) => clip.id), rules);
-      const picked = pool.find((clip) => clip.id === selection.value) ?? pickRandom(pool);
-      rest.push(picked);
-      pool = pool.filter((clip) => clip.id !== picked.id);
-    }
-    clipSet = firstClip ? [firstClip, ...rest] : rest;
   }
 
   if (!warning && container !== "montage") {
-    const basePool = eligibleSafeClips.length ? eligibleSafeClips : clips;
-    const selection = await selectClip(basePool.map((clip) => clip.id), rules);
-    const picked = basePool.find((clip) => clip.id === selection.value) ?? pickRandom(basePool);
-    clipSet = picked ? [picked] : [];
+    const safePool = eligibleSafeClips.length ? eligibleSafeClips : clips;
+    const broadPool = eligibleMontageClips.length ? eligibleMontageClips : clips;
+    const basePool = broadPool.length > safePool.length ? broadPool : safePool;
+    const minDur = params.minDurationSec;
+    const durationPool = minDur != null
+      ? basePool.filter((clip) => clip.durationSec >= minDur)
+      : basePool;
+    const selectionPool = durationPool.length > 0 ? durationPool : basePool;
+    const shuffledPool = shuffle([...selectionPool]);
+    if (shuffledPool.length === 0) {
+      warning = "No eligible clips for container.";
+    } else {
+      const picked = pickRandom(shuffledPool);
+      clipSet = [picked];
+    }
   }
 
   if (!warning && clipSet.length === 0) {
@@ -131,7 +166,7 @@ export const buildOnscreenAndCaption = (params: {
     hashtagTotal < rules.spam_guardrails.hashtag_count_min ||
     hashtagTotal > rules.spam_guardrails.hashtag_count_max
   ) {
-    return { warning: `Caption hashtag count out of range (${hashtagTotal}).` };
+    return { onscreenText, caption, warning: `Caption hashtag count out of range (${hashtagTotal}).` };
   }
   return { onscreenText, caption };
 };

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
 import { requireLocalRequest } from "../../../../lib/auth";
 
-const VALID_STATUSES = ["DRAFT", "RENDERED", "PENDING", "POSTED", "FAILED"];
+const VALID_STATUSES = ["DRAFT", "RENDERED", "UPLOADING", "UPLOADED_DRAFT", "PENDING", "POSTED", "FAILED"];
 
 export async function PATCH(
   request: NextRequest,

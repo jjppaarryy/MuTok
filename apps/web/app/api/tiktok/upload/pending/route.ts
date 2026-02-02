@@ -15,6 +15,17 @@ type UploadInitResponse = {
     publish_id?: string;
   };
 };
+const mapPrivacyLevel = (visibility: string): string => {
+  switch (visibility) {
+    case "PUBLIC":
+      return "PUBLIC_TO_EVERYONE";
+    case "FRIENDS":
+      return "MUTUAL_FOLLOW_FRIENDS";
+    case "PRIVATE":
+    default:
+      return "SELF_ONLY";
+  }
+};
 import { getPendingShareCount24h, canUploadMore } from "../../../../../lib/queue";
 
 export async function POST(request: Request) {
@@ -60,16 +71,28 @@ export async function POST(request: Request) {
 
     await client.getCreatorInfo();
 
-    const plans = await prisma.postPlan.findMany({
-      where: { status: "RENDERED" },
-      orderBy: { createdAt: "asc" },
-      take: cappedLimit
+    const plans = await prisma.$transaction(async (tx) => {
+      const candidates = await tx.postPlan.findMany({
+        where: { status: "RENDERED" },
+        orderBy: { createdAt: "asc" },
+        take: cappedLimit
+      });
+      if (candidates.length === 0) return [];
+      await tx.postPlan.updateMany({
+        where: { id: { in: candidates.map((plan) => plan.id) }, status: "RENDERED" },
+        data: { status: "UPLOADING" }
+      });
+      return tx.postPlan.findMany({
+        where: { id: { in: candidates.map((plan) => plan.id) }, status: "UPLOADING" },
+        orderBy: { createdAt: "asc" }
+      });
     });
 
     const results: Array<{ id: string; status: string; error?: string }> = [];
 
     for (const plan of plans) {
       if (!plan.renderPath) {
+        await prisma.postPlan.update({ where: { id: plan.id }, data: { status: "FAILED" } });
         results.push({ id: plan.id, status: "FAILED", error: "Missing renderPath" });
         continue;
       }
@@ -79,6 +102,7 @@ export async function POST(request: Request) {
         where: { id: { in: clipIds } }
       });
       if (clips.some((clip) => clip.sync === "critical")) {
+        await prisma.postPlan.update({ where: { id: plan.id }, data: { status: "FAILED" } });
         results.push({
           id: plan.id,
           status: "FAILED",
@@ -89,10 +113,13 @@ export async function POST(request: Request) {
 
       const fileStats = await stat(plan.renderPath);
       const exportDefaults = settings.export_defaults;
+      const baseTitle = (plan.caption || exportDefaults.caption || "Draft from TikTok Growth Agent").trim();
+      const title = baseTitle.length > 2200 ? `${baseTitle.slice(0, 2197)}...` : baseTitle;
+      const privacyLevel = settings.sandbox ? "SELF_ONLY" : mapPrivacyLevel(exportDefaults.visibility ?? "PUBLIC");
       const initResponse = await client.initializeUpload({
         post_info: {
-          title: plan.caption || exportDefaults.caption,
-          privacy_level: exportDefaults.visibility,
+          title,
+          privacy_level: privacyLevel,
           disable_comment: !exportDefaults.allowComment,
           disable_duet: !exportDefaults.allowDuet,
           disable_stitch: !exportDefaults.allowStitch,
@@ -109,6 +136,7 @@ export async function POST(request: Request) {
 
       const uploadUrl = (initResponse as UploadInitResponse)?.data?.upload_url;
       if (!uploadUrl) {
+        await prisma.postPlan.update({ where: { id: plan.id }, data: { status: "FAILED" } });
         results.push({ id: plan.id, status: "FAILED", error: "Missing upload_url" });
         continue;
       }
@@ -124,14 +152,15 @@ export async function POST(request: Request) {
         const message = error instanceof Error ? error.message : "Upload failed";
         if (isSpamRisk(message)) {
           await setCooldown(24);
-          results.push({
-            id: plan.id,
-            status: "FAILED",
-            error: "spam_risk cooldown triggered"
-          });
-          break;
         }
-        throw error;
+        await prisma.postPlan.update({ where: { id: plan.id }, data: { status: "RENDERED" } });
+        results.push({
+          id: plan.id,
+          status: "FAILED",
+          error: isSpamRisk(message) ? "spam_risk cooldown triggered" : message
+        });
+        if (isSpamRisk(message)) break;
+        continue;
       }
 
       await prisma.postPlan.update({

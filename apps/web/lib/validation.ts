@@ -99,10 +99,7 @@ export const inspoImportSchema = z.object({
 // Asset schemas
 export const clipMetadataSchema = z.object({
   category: z.string().min(1, "Category is required"),
-  energy: z.number().int().min(1).max(5),
-  motion: z.enum(["static", "slow", "moderate", "fast", "intense"]),
-  sync: z.enum(["any", "sensitive", "critical"]),
-  vibe: z.string().min(1, "Vibe is required")
+  sync: z.enum(["safe", "sensitive", "critical"])
 });
 
 export const snippetSchema = z.object({
@@ -110,9 +107,7 @@ export const snippetSchema = z.object({
   startSec: z.number().min(0),
   durationSec: z.number().min(1).max(60),
   energyScore: z.number().min(0).max(1),
-  energy: z.number().int().min(1).max(5).optional(),
   section: z.string().optional(),
-  vibe: z.string().optional(),
   approved: z.boolean().optional(),
   moment3to7: z.boolean().optional(),
   moment7to11: z.boolean().optional()
@@ -164,6 +159,9 @@ export const rulesSchema = z.object({
     hashtag_max: z.number().int().min(1).max(10).optional()
   }).optional(),
   montage: z.object({
+    clip_count: z.number().int().min(1).max(100).optional(),
+    clip_count_min: z.number().int().min(1).max(100).optional(),
+    clip_count_max: z.number().int().min(1).max(100).optional(),
     clip_duration_range: z.tuple([z.number(), z.number()]).optional()
   }).optional(),
   viral_engine: z.object({

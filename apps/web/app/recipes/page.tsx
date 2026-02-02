@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import ActionButton from "../../components/ActionButton";
 import PageHeader from "../../components/PageHeader";
@@ -7,7 +6,6 @@ import RecipeCard from "../../components/recipes/RecipeCard";
 import RecipesBulkTools from "../../components/recipes/RecipesBulkTools";
 import RecipesFilters from "../../components/recipes/RecipesFilters";
 import { Recipe, RecipeForm, toForm } from "../../components/recipes/recipeTypes";
-
 type RecipeScore = {
   recipeId: string;
   recipeName: string;
@@ -16,7 +14,6 @@ type RecipeScore = {
   score14d: number;
   count14d: number;
 };
-
 type Coverage = {
   activeRecipes: number;
   requiredRecipes: number;
@@ -24,13 +21,11 @@ type Coverage = {
   cadencePerDay: number;
   cooldownDays: number;
 };
-
 const uniqueRecipeName = (base: string) => {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const rand = Math.random().toString(36).slice(2, 6);
   return `${base} ${stamp}-${rand}`;
 };
-
 export default function RecipesPage() {
   const [recipes, setRecipes] = useState<RecipeForm[]>([]);
   const [recipeScores, setRecipeScores] = useState<RecipeScore[]>([]);
@@ -42,13 +37,12 @@ export default function RecipesPage() {
   const [filterContainer, setFilterContainer] = useState("all");
   const [search, setSearch] = useState("");
   const [importText, setImportText] = useState("");
-
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const loadRecipes = async () => {
-    const response = await fetch("/api/recipes");
+    const response = await fetch("/api/recipes", { cache: "no-store" });
     const data = (await response.json()) as { recipes: Recipe[] };
     setRecipes((data.recipes ?? []).map(toForm));
   };
-
   const loadSummary = async () => {
     try {
       const response = await fetch("/api/analytics/summary");
@@ -79,20 +73,12 @@ export default function RecipesPage() {
       setRetireCandidates([]);
     }
   };
-
   useEffect(() => {
     void loadRecipes();
     void loadSummary();
   }, []);
-
-  const scoreMap = useMemo(() => {
-    return new Map(recipeScores.map((score) => [score.recipeId, score]));
-  }, [recipeScores]);
-
-  const retireSet = useMemo(() => {
-    return new Set(retireCandidates.map((recipe) => recipe.recipeId));
-  }, [retireCandidates]);
-
+  const scoreMap = useMemo(() => new Map(recipeScores.map((score) => [score.recipeId, score])), [recipeScores]);
+  const retireSet = useMemo(() => new Set(retireCandidates.map((recipe) => recipe.recipeId)), [retireCandidates]);
   const filtered = useMemo(() => {
     return recipes.filter((recipe) => {
       if (filterStatus === "active" && !recipe.enabled) return false;
@@ -105,39 +91,39 @@ export default function RecipesPage() {
       return true;
     });
   }, [recipes, filterStatus, filterCta, filterContainer, search]);
-
   const updateRecipe = (id: string, updates: Partial<RecipeForm>) => {
     setRecipes((prev) => prev.map((recipe) => (recipe.id === id ? { ...recipe, ...updates } : recipe)));
   };
-
   const saveRecipe = async (recipe: RecipeForm) => {
     setMessage(null);
+    const payload = {
+      name: recipe.name,
+      beat1Text: recipe.beat1Text,
+      beat2Text: recipe.beat2Text,
+      captionText: recipe.captionText,
+      ctaType: recipe.ctaType,
+      allowedSnippetTypes: recipe.allowedSnippetTypes ?? [],
+      containerAllowed: recipe.containerAllowed,
+      enabled: recipe.enabled
+    };
     const response = await fetch(`/api/recipes/${recipe.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: recipe.name,
-        beat1Text: recipe.beat1Text,
-        beat2Text: recipe.beat2Text,
-        captionText: recipe.captionText,
-        ctaType: recipe.ctaType,
-        allowedSnippetTypes: recipe.allowedSnippetTypes,
-        containerAllowed: recipe.containerAllowed,
-        enabled: recipe.enabled
-      })
+      body: JSON.stringify(payload),
+      cache: "no-store"
     });
     if (!response.ok) {
-      setMessage("Failed to save recipe.");
+      const err = await response.text();
+      setMessage(`Failed to save hook: ${response.status} ${err || response.statusText}`);
       return;
     }
-    setMessage("Recipe saved.");
+    setMessage("Hook saved.");
     await loadRecipes();
     await loadSummary();
   };
-
   const createRecipe = async () => {
     setMessage(null);
-    const name = uniqueRecipeName("New recipe");
+    const name = uniqueRecipeName("New hook");
     const response = await fetch("/api/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -152,14 +138,13 @@ export default function RecipesPage() {
       })
     });
     if (!response.ok) {
-      setMessage("Failed to create recipe.");
+      setMessage("Failed to create hook.");
       return;
     }
     await loadRecipes();
     await loadSummary();
-    setMessage("Recipe created.");
+    setMessage("Hook created.");
   };
-
   const duplicateRecipe = async (recipe: RecipeForm) => {
     setMessage(null);
     const name = uniqueRecipeName(`${recipe.name} Copy`);
@@ -177,26 +162,40 @@ export default function RecipesPage() {
       })
     });
     if (!response.ok) {
-      setMessage("Failed to duplicate recipe.");
+      setMessage("Failed to duplicate hook.");
       return;
     }
     await loadRecipes();
     await loadSummary();
-    setMessage("Recipe duplicated.");
+    setMessage("Hook duplicated.");
   };
-
   const toggleArchive = async (recipe: RecipeForm) => {
     await saveRecipe({ ...recipe, enabled: !recipe.enabled });
   };
-
   const exportJson = () => {
-    setImportText(JSON.stringify(recipes, null, 2));
+    const payload = JSON.stringify(recipes, null, 2);
+    setImportText(payload);
+    setBulkMessage("Exported to the box below.");
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(payload).then(
+        () => setBulkMessage("Exported and copied to clipboard."),
+        () => setBulkMessage("Exported to the box below.")
+      );
+    }
   };
-
   const importJson = async () => {
     setMessage(null);
+    setBulkMessage(null);
     try {
+      if (!importText.trim()) {
+        setBulkMessage("Paste JSON first, then import.");
+        return;
+      }
       const parsed = JSON.parse(importText) as RecipeForm[];
+      if (!Array.isArray(parsed)) {
+        setBulkMessage("JSON must be an array of hooks.");
+        return;
+      }
       const payload = parsed.map((recipe) => ({
         name: recipe.name,
         beat1Text: recipe.beat1Text,
@@ -207,56 +206,62 @@ export default function RecipesPage() {
         allowedSnippetTypes: recipe.allowedSnippetTypes,
         enabled: recipe.enabled
       }));
+      if (payload.length === 0) {
+        setBulkMessage("No hooks found to import.");
+        return;
+      }
       const response = await fetch("/api/recipes/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recipes: payload })
       });
       if (!response.ok) {
-        setMessage("Import failed.");
+        const text = await response.text();
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          setBulkMessage(`Import failed: ${data.error ?? "Unknown error"}`);
+        } catch {
+          setBulkMessage(text ? `Import failed: ${text}` : "Import failed.");
+        }
         return;
       }
-      setMessage("Recipes imported.");
+      const data = (await response.json()) as { created?: string[]; skipped?: string[] };
+      const createdCount = data.created?.length ?? 0;
+      const skippedCount = data.skipped?.length ?? Math.max(0, payload.length - createdCount);
+      setBulkMessage(`Imported ${createdCount} hook${createdCount === 1 ? "" : "s"}. Skipped ${skippedCount}.`);
       await loadRecipes();
       await loadSummary();
     } catch {
-      setMessage("Invalid JSON.");
+      setBulkMessage("Invalid JSON.");
     }
   };
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
       <PageHeader
-        title="Recipes"
-        description="Fixed, pre-approved captions and on-screen text."
-        tip="Edit the recipe itself if you want a change. No runtime rewriting."
+        title="Hooks"
+        description="Your pre-approved hook library. These lines go straight into posts."
+        tip="Edit a hook here if you want to change the wording."
         actions={
-          <div style={{ display: "flex", gap: 16 }}>
-            <ActionButton label="New recipe" onClick={createRecipe} />
-            <ActionButton label="Export JSON" variant="secondary" onClick={exportJson} />
-            <ActionButton label="Import JSON" variant="secondary" onClick={importJson} />
+          <div className="wrap-actions">
+            <ActionButton label="New hook" onClick={createRecipe} />
           </div>
         }
       />
-
       {message ? (
         <div style={{ padding: 16, borderRadius: 12, backgroundColor: "#f0fdf4", color: "#166534" }}>
           {message}
         </div>
       ) : null}
-
       {coverage && coverage.shortfall > 0 ? (
         <div style={{ padding: 16, borderRadius: 12, backgroundColor: "#fff7ed", color: "#9a3412" }}>
-          You need {coverage.shortfall} more active recipes to sustain {coverage.cadencePerDay}/day with a {coverage.cooldownDays}-day cooldown.
+          You need {coverage.shortfall} more active hooks to sustain {coverage.cadencePerDay}/day with a {coverage.cooldownDays}-day cooldown.
         </div>
       ) : null}
-
       {retireCandidates.length > 0 ? (
         <div style={{ padding: 16, borderRadius: 12, backgroundColor: "#fef2f2", color: "#b91c1c" }}>
-          {retireCandidates.length} recipes are underperforming and ready to retire.
+          {retireCandidates.length} hooks are underperforming and ready to retire.
         </div>
       ) : null}
-
       <RecipesFilters
         filterStatus={filterStatus}
         filterCta={filterCta}
@@ -267,23 +272,31 @@ export default function RecipesPage() {
         onContainerChange={setFilterContainer}
         onSearchChange={setSearch}
       />
-
       <div style={{ display: "grid", gap: 24 }}>
-        {filtered.map((recipe) => (
-          <RecipeCard
-            key={recipe.id}
-            recipe={recipe}
-            stats={scoreMap.get(recipe.id)}
-            isRetireCandidate={retireSet.has(recipe.id)}
-            onChange={updateRecipe}
-            onSave={saveRecipe}
-            onDuplicate={duplicateRecipe}
-            onToggleArchive={toggleArchive}
-          />
-        ))}
+        {filtered.length === 0 ? (
+          <div style={{ padding: 24, borderRadius: 16, border: "1px solid #e2e8f0", backgroundColor: "white", color: "#64748b" }}>
+            No hooks match these filters yet. Try clearing filters or create a new hook.
+          </div>
+        ) : (
+          filtered.map((recipe) => (
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              stats={scoreMap.get(recipe.id)}
+              isRetireCandidate={retireSet.has(recipe.id)}
+              onChange={updateRecipe}
+              onSave={saveRecipe}
+              onDuplicate={duplicateRecipe}
+              onToggleArchive={toggleArchive}
+            />
+          ))
+        )}
       </div>
-
-      <RecipesBulkTools importText={importText} onImportTextChange={setImportText} />
+      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end" }}>
+        <ActionButton label="Export JSON" variant="secondary" onClick={exportJson} />
+        <ActionButton label="Import JSON" variant="secondary" onClick={importJson} />
+      </div>
+      <RecipesBulkTools importText={importText} onImportTextChange={setImportText} message={bulkMessage} />
     </div>
   );
 }

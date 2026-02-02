@@ -13,7 +13,7 @@ export async function getPendingShareCount24h() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   return prisma.postPlan.count({
     where: {
-      status: { in: ["UPLOADED_DRAFT", "RENDERED", "PLANNED"] },
+      status: { in: ["UPLOADED_DRAFT", "UPLOADING", "RENDERED", "PLANNED"] },
       createdAt: { gte: since }
     }
   });

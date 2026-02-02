@@ -8,6 +8,7 @@ import { validateBeat1 } from "./planSelection";
 import { toneLintPost } from "./toneLint";
 import { BrainRunContext } from "./brainRunContext";
 import { buildBannedWords, buildCtaMatchers, deriveCtaIntent, enforceCtaIntent } from "./brainRunRules";
+import { normalizeClipCategory } from "./clipCategories";
 
 type ProcessResult = { created: string[]; skipped: Array<{ reason: string; post: string }> };
 
@@ -31,7 +32,7 @@ export async function processBrainPlan(
   const skipped: Array<{ reason: string; post: string }> = [];
   let repairCount = 0;
   const bannedWords = buildBannedWords(settings);
-  const safeCategories = ["DAW_screen", "Abstract_visual"];
+  const safeCategories = ["calm", "neutral"];
 
   for (const post of plan.posts) {
     const planClips = post.clip_ids
@@ -45,21 +46,21 @@ export async function processBrainPlan(
     }
 
     if (post.container === "montage") {
-      if (planClips.length < settings.montage.clip_count) {
+      const montageMin = settings.montage.clip_count_min ?? settings.montage.clip_count;
+      if (planClips.length < montageMin) {
         skipped.push({ reason: "Not enough clips for montage", post: post.hook_family });
         continue;
-      }
-      const dawAnchor = planClips.find((clip) => clip.category === "DAW_screen");
-      if (dawAnchor) {
-        const reordered = [dawAnchor, ...planClips.filter((clip) => clip.id !== dawAnchor.id)];
-        post.clip_ids = reordered.map((clip) => clip.id);
       }
     }
 
     if (post.container === "static_daw") {
-      const safeClip = planClips.find((clip) => safeCategories.includes(clip.category));
+      const safeClip = planClips.find((clip) =>
+        safeCategories.includes(normalizeClipCategory(clip.category))
+      );
       if (!safeClip) {
-        const fallback = clips.find((clip) => safeCategories.includes(clip.category));
+        const fallback = clips.find((clip) =>
+          safeCategories.includes(normalizeClipCategory(clip.category))
+        );
         if (fallback) {
           post.clip_ids = [fallback.id];
         }
@@ -228,14 +229,12 @@ export async function processBrainPlan(
       computeCompatibility(
         {
           id: clip.id,
-          energy: clip.energy,
-          motion: clip.motion as "low" | "med" | "high",
           sync: clip.sync as "safe" | "sensitive" | "critical",
-          category: clip.category
+          category: normalizeClipCategory(clip.category)
         },
         {
           id: snippet.id,
-          energyScore: snippet.energyScore
+          section: snippet.section
         },
         { disallowHandsKeysLiteral: true }
       )

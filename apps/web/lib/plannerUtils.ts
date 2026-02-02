@@ -1,7 +1,16 @@
-export const safeCategories = ["DAW_screen", "Abstract_visual"];
+export const safeCategories = ["calm", "neutral"];
 
 export const pickRandom = <T,>(items: T[]) => {
   return items[Math.floor(Math.random() * items.length)];
+};
+
+/** Fisher–Yates shuffle; mutates and returns the array. */
+export const shuffle = <T,>(items: T[]): T[] => {
+  for (let i = items.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
 };
 
 export const pickMany = <T,>(items: T[], count: number) => {
