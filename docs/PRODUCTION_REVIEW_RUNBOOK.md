@@ -29,7 +29,8 @@ TikTok explicitly rejects “unfinished/testing” looking submissions.
 ### Deploy to GitHub Pages (gh-pages branch)
 
 1. **Create a `gh-pages` branch** whose root contains only the site files:
-   - `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`
+   - `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `.nojekyll`
+   - **No `README.md`** in the gh-pages root (the steps below copy only `public/landing/*`, so the repo README is never deployed).
 
 2. **In GitHub:** Repo → Settings → Pages → Source: **Deploy from a branch** → Branch: **gh-pages** → Folder: **/(root)** → Save.
 
@@ -43,6 +44,7 @@ git checkout -b gh-pages
 git rm -rf .
 git checkout main -- public/landing
 mv public/landing/* .
+mv public/landing/.nojekyll . 2>/dev/null || true
 rmdir -p public/landing 2>/dev/null || true
 git add .
 git commit -m "Deploy review site"
@@ -78,6 +80,14 @@ Open the root URL in an incognito window and confirm:
 - Demo video actually plays  
 
 When the site is live, paste the final root URL here for a reviewer-style pass on wording and click-paths.
+
+### If the root (/) still shows README or "Single-User MVP"
+
+GitHub Pages is probably still deploying from **main** instead of **gh-pages**, or the CDN is serving a cached response.
+
+1. **Check the publishing source:** Repo → **Settings → Pages** → Build and deployment → Source: **Deploy from a branch** → Branch: **gh-pages** (not main) → Folder: **/(root)** → Save.
+2. **Wait 2–5 minutes** after saving, then open `https://jjppaarryy.github.io/MuTok/` in an **incognito/private** window (or another browser) so you’re not seeing a cached page.
+3. If it still shows the README, do a hard refresh (Ctrl+Shift+R or Cmd+Shift+R). The `gh-pages` branch already has the correct `index.html` (creator-tool copy); the root will show it once the source is gh-pages and cache has updated.
 
 ---
 
