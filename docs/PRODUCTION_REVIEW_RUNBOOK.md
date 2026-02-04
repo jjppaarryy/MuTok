@@ -83,11 +83,16 @@ When the site is live, paste the final root URL here for a reviewer-style pass o
 
 ### If the root (/) still shows README or "Single-User MVP"
 
-GitHub Pages is probably still deploying from **main** instead of **gh-pages**, or the CDN is serving a cached response.
+**Cause:** GitHub is serving `/` from the wrong source. The **gh-pages** branch root contains only: `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `.nojekyll` — **no README.md**. So `/` must be served from **gh-pages**, not main.
 
-1. **Check the publishing source:** Repo → **Settings → Pages** → Build and deployment → Source: **Deploy from a branch** → Branch: **gh-pages** (not main) → Folder: **/(root)** → Save.
-2. **Wait 2–5 minutes** after saving, then open `https://jjppaarryy.github.io/MuTok/` in an **incognito/private** window (or another browser) so you’re not seeing a cached page.
-3. If it still shows the README, do a hard refresh (Ctrl+Shift+R or Cmd+Shift+R). The `gh-pages` branch already has the correct `index.html` (creator-tool copy); the root will show it once the source is gh-pages and cache has updated.
+**Fix (no ambiguity):**
+
+1. Repo → **Settings → Pages** → Build and deployment.
+2. Set **Source:** **Deploy from a branch**.
+3. Set **Branch:** **gh-pages** (not main). Set **Folder:** **/(root)**. Save.
+4. Wait 1–2 minutes, then open `https://jjppaarryy.github.io/MuTok/` in an **incognito** window (or add `?v=123`). Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) if needed.
+
+If Branch was **main**, GitHub was serving the repo root from main (README becomes the index). Once it’s **gh-pages** and **/(root)**, `/` and `/index.html` will both show the landing page.
 
 ---
 
