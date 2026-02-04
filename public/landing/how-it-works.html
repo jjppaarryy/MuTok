@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How it works – MuTok</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav>
+    <a href="index.html" class="logo">Mu<span>Tok</span></a>
+    <div>
+      <a href="index.html">Home</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="demo.html">Demo</a>
+      <a href="support.html">Support</a>
+    </div>
+  </nav>
+
+  <header>
+    <h1>How it works</h1>
+    <p class="tagline">The exact flow, step by step.</p>
+  </header>
+
+  <div class="container">
+    <h2>End-to-end flow</h2>
+    <ol style="line-height: 2;">
+      <li><strong>Connect TikTok.</strong> In MuTok you sign in with TikTok (OAuth). You grant scopes for basic profile info, video upload, and (optionally) video list for metrics.</li>
+      <li><strong>Plan.</strong> You add clips and tracks, approve snippets, and generate draft plans. MuTok suggests hooks, captions, and layouts based on your rules.</li>
+      <li><strong>Render.</strong> MuTok renders each plan to a video (or slide carousel) on your machine using FFmpeg. No video is sent to our servers.</li>
+      <li><strong>Upload as draft (inbox upload).</strong> You click “Upload drafts” in MuTok. The app uses TikTok’s “upload without posting” API: it sends the video to TikTok and you receive an inbox notification in the TikTok app.</li>
+      <li><strong>Complete in TikTok.</strong> You open the TikTok app, tap the inbox notification, finish editing (caption, privacy, etc.), and publish when you’re ready. MuTok does not publish to your feed.</li>
+      <li><strong>Learn (optional).</strong> If you use the video list scope, you can “Refresh metrics” in MuTok to pull view/like/comment/share data from TikTok and see leaderboards.</li>
+    </ol>
+
+    <h2>What MuTok does and does not do</h2>
+    <ul style="line-height: 1.8;">
+      <li>MuTok uploads to TikTok inbox (not directly to the feed).</li>
+      <li>The user completes editing and posting inside TikTok.</li>
+      <li>MuTok does not automate likes, follows, comments, or messages.</li>
+      <li>MuTok only accesses data for the authenticated account that explicitly authorises access via TikTok Login.</li>
+    </ul>
+    <p>MuTok does not auto-follow, auto-like, auto-comment, DM, or scrape. It does not publish directly to your feed; you complete posting inside TikTok.</p>
+
+    <div class="cta-section">
+      <a href="demo.html" class="btn">Watch the demo</a>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2026 MuTok. All rights reserved.</p>
+    <p>
+      <a href="https://jjppaarryy.github.io/mutok-legal/terms">Terms of Service</a> |
+      <a href="https://jjppaarryy.github.io/mutok-legal/privacy">Privacy Policy</a>
+    </p>
+  </footer>
+</body>
+</html>
