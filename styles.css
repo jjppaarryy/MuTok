@@ -23,8 +23,11 @@ nav {
   flex-wrap: wrap;
   gap: 12px;
 }
-nav .logo { font-size: 1.5em; font-weight: 800; letter-spacing: -1px; }
+nav .logo { font-size: 1.5em; font-weight: 800; letter-spacing: -1px; display: inline-flex; align-items: center; gap: 10px; }
 nav .logo span { color: var(--primary); }
+nav .logo-icon { width: 36px; height: 36px; border-radius: 10px; display: block; vertical-align: middle; }
+header .logo { display: inline-flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+header .logo-icon { width: 64px; height: 64px; border-radius: 16px; display: block; }
 nav a {
   color: var(--light);
   text-decoration: none;
