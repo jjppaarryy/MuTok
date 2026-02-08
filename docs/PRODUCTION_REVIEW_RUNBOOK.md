@@ -29,7 +29,7 @@ TikTok explicitly rejects “unfinished/testing” looking submissions.
 ### Deploy to GitHub Pages (gh-pages branch)
 
 1. **Create a `gh-pages` branch** whose root contains only the site files:
-   - `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `.nojekyll`
+   - `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `icon.png`, `.nojekyll`
    - **No `README.md`** in the gh-pages root (the steps below copy only `public/landing/*`, so the repo README is never deployed).
 
 2. **In GitHub:** Repo → Settings → Pages → Source: **Deploy from a branch** → Branch: **gh-pages** → Folder: **/(root)** → Save.
@@ -83,7 +83,7 @@ When the site is live, paste the final root URL here for a reviewer-style pass o
 
 ### If the root (/) still shows README or "Single-User MVP"
 
-**Cause:** GitHub is serving `/` from the wrong source. The **gh-pages** branch root contains only: `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `.nojekyll` — **no README.md**. So `/` must be served from **gh-pages**, not main.
+**Cause:** GitHub is serving `/` from the wrong source. The **gh-pages** branch root contains only: `index.html`, `how-it-works.html`, `demo.html`, `support.html`, `styles.css`, `icon.png`, `.nojekyll` — **no README.md**. So `/` must be served from **gh-pages**, not main.
 
 **Fix (no ambiguity):**
 
@@ -93,6 +93,21 @@ When the site is live, paste the final root URL here for a reviewer-style pass o
 4. Wait 1–2 minutes, then open `https://jjppaarryy.github.io/MuTok/` in an **incognito** window (or add `?v=123`). Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) if needed.
 
 If Branch was **main**, GitHub was serving the repo root from main (README becomes the index). Once it’s **gh-pages** and **/(root)**, `/` and `/index.html` will both show the landing page.
+
+**Do this in GitHub (the real fix):**
+
+1. Repo → **Settings → Pages**.
+2. Set **Source:** Deploy from a branch.
+3. Set **Branch:** **gh-pages**. Set **Folder:** **/(root)**. **Save.**
+4. Wait until the Pages status shows “Your site is live” (green tick / updated timestamp).
+5. Force cold checks: open in **incognito**  
+   - `https://jjppaarryy.github.io/MuTok/?v=123`  
+   - `https://jjppaarryy.github.io/MuTok/index.html?v=123`  
+   When fixed, both show the same black hero landing page.
+
+**Fallback (only if Pages won’t stick today):** In the TikTok Developer Portal, set **Website URL** to `https://jjppaarryy.github.io/MuTok/index.html` temporarily. Prefer fixing `/` so reviewers get the root URL as the site home.
+
+**Once `/` is fixed,** the only review hygiene left: add your real demo video embed on the Demo page, and swap `support@mutok.app` for an inbox you monitor.
 
 ---
 
